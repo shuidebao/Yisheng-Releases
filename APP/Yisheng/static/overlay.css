@@ -1,0 +1,113 @@
+:root {
+  color-scheme: dark;
+  --panel-alpha: .45;
+  --lime: #c7ff61;
+  font-family: "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; background: transparent !important; overflow: hidden; }
+body { color: white; }
+
+.overlay-shell {
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+  background: transparent;
+}
+
+.overlay-toolbar {
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  left: 8px;
+  right: 8px;
+  min-height: 38px;
+  padding: 6px 8px 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(255,255,255,.72);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 11px;
+  background: rgba(10,12,18,.72);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity .18s ease, transform .18s ease;
+  cursor: move;
+}
+
+.overlay-shell:hover .overlay-toolbar,
+.overlay-toolbar:focus-within { opacity: 1; transform: translateY(0); }
+.overlay-name { font-size: 11px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
+.overlay-actions { display: flex; align-items: center; gap: 8px; }
+.overlay-actions label, .overlay-actions output { font-size: 10px; color: rgba(255,255,255,.65); }
+.overlay-actions input { width: 105px; accent-color: var(--lime); cursor: pointer; }
+.overlay-actions button {
+  padding: 6px 10px;
+  color: #11150a;
+  border: 0;
+  border-radius: 7px;
+  background: var(--lime);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.overlay-actions button.lock-button { color: white; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.10); }
+.overlay-locked .overlay-actions input { opacity: .45; pointer-events: none; }
+.overlay-locked .overlay-actions button.lock-button { color: #11150a; background: var(--lime); }
+
+.subtitle-panel {
+  width: 100%;
+  padding: 18px 24px 17px;
+  border-radius: 16px;
+  background: rgba(6, 8, 13, var(--panel-alpha));
+  text-align: center;
+  text-shadow: 0 2px 5px rgba(0,0,0,.96), 0 0 15px rgba(0,0,0,.9);
+  transition: background .15s ease;
+}
+
+.subtitle-panel p { margin: 0; overflow-wrap: anywhere; }
+.original { color: rgba(255,255,255,.94); font-size: clamp(16px, 2.6vw, 24px); line-height: 1.42; font-weight: 550; }
+.translation { margin-top: 8px !important; color: var(--lime); font-size: clamp(22px, 3.6vw, 34px); line-height: 1.36; font-weight: 760; }
+.subtitle-panel small { display: block; margin-top: 9px; color: rgba(255,255,255,.54); font-size: 9px; letter-spacing: .04em; }
+
+.resize-handle {
+  position: absolute;
+  z-index: 3;
+  right: 5px;
+  bottom: 5px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(10,12,18,.66);
+  opacity: 0;
+  cursor: nwse-resize;
+  transition: opacity .18s ease;
+}
+.resize-handle::before, .resize-handle::after, .resize-handle span {
+  content: "";
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 12px;
+  height: 1px;
+  background: var(--lime);
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+.resize-handle::after { width: 8px; bottom: 9px; }
+.resize-handle span { width: 4px; bottom: 13px; }
+.overlay-shell:hover .resize-handle { opacity: 1; }
+.overlay-locked .resize-handle { display: none; }
+
+@media (max-width: 600px) {
+  .overlay-actions label, .overlay-name { display: none; }
+  .subtitle-panel { padding: 15px; }
+}

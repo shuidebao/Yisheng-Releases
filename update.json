@@ -1,0 +1,9 @@
+{
+  "version": "1.0.10",
+  "url": "https://github.com/shuidebao/Yisheng-Releases/releases/download/v1.0.10/Yisheng-1.0.10-China-Offline-Setup.exe",
+  "filename": "Yisheng-1.0.10-China-Offline-Setup.exe",
+  "sha256": "D67520308FC51866B0B60DA80ADC8E680C74BAEAB5B271942A3FABC8718ABED1",
+  "size": 444521231,
+  "notes": "修复译声窗口消失后仍提示正在运行的问题：再次双击桌面图标会直接恢复主窗口；关闭迷你字幕会自动返回主界面。新增系统托盘图标，可双击打开或右键彻底退出；任务管理器中的后台组件改为清晰的 YishengBackend 名称，退出后不会残留后台进程。继续内置 Base、英语译中和日语译中离线模型。",
+  "mandatory": false
+}

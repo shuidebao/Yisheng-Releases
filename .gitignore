@@ -1,0 +1,24 @@
+# Local release payloads and generated installers
+*.exe
+*.exe.sha256
+.offline-installer-build/
+.release-build/
+.publish/
+
+# Bundled third-party runtime and downloaded/offline models
+APP/Yisheng/runtime/
+APP/Yisheng/.models/
+APP/Yisheng/logs/
+APP/Yisheng/.build/
+
+# Python and local tooling caches
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b12">
+  <title>译声 · 本地同声传译</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png?v=ui">
+  <style>html,body{background:#090b12}html:not([data-app-ready]) body{opacity:0}</style>
+  <link rel="stylesheet" href="/static/styles.css?v=ui">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="译声首页">
+      <span class="brand-mark" aria-hidden="true">
+        <img src="/static/yisheng-logo.png?v=ui" alt="">
+      </span>
+      <span><strong>译声</strong><small>LOCAL INTERPRETER</small></span>
+      <span class="version-badge" id="appVersion">版本读取中…</span>
+    </a>
+    <div class="top-actions">
+      <span class="privacy-pill"><i></i><span id="runtimeLabel">本地处理 · 免费</span></span>
+      <button class="icon-button mini-button" id="miniButton" aria-label="打开迷你置顶字幕" title="迷你置顶字幕">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h10M8 9h8M9 12h6"/></svg>
+        <span>迷你字幕</span>
+      </button>
+      <button class="icon-button" id="settingsButton" aria-label="打开设置" title="设置">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.06.06-2.83 2.83-.06-.06a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.65V21h-4v-.09a1.8 1.8 0 0 0-1.1-1.65 1.8 1.8 0 0 0-1.98.36l-.06.06-2.83-2.83.06-.06A1.8 1.8 0 0 0 4.3 15a1.8 1.8 0 0 0-1.65-1.1h-.09v-4h.09A1.8 1.8 0 0 0 4.3 8.8a1.8 1.8 0 0 0-.36-1.98l-.06-.06 2.83-2.83.06.06a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.85 2.7v-.1h4v.1a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 1.98-.36l.06-.06 2.83 2.83-.06.06a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.1h.09v4h-.09A1.8 1.8 0 0 0 19.4 15Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero-row">
+      <div>
+        <p class="eyebrow"><span id="liveDot"></span><span id="sessionState">准备就绪</span></p>
+        <h1>听见原声，<em>即刻读懂。</em></h1>
+        <p class="hero-copy">语音不上传云端。你的电脑与本地模型，完成转写和中文翻译。</p>
+      </div>
+      <div class="session-metrics" aria-label="会话指标">
+        <div><span id="latencyMetric">—</span><small>处理延迟</small></div>
+        <div><span id="languageMetric">—</span><small>识别语言</small></div>
+        <div><span id="segmentMetric">0</span><small>片段</small></div>
+      </div>
+    </section>
+
+    <section class="transcript-shell" aria-live="polite">
+      <div class="column-labels">
+        <span><i class="label-dot original-dot"></i>原文</span>
+        <span><i class="label-dot translation-dot"></i>中文翻译</span>
+        <button id="clearButton" class="text-button">清空记录</button>
+      </div>
+      <div id="transcriptList" class="transcript-list">
+        <div class="empty-state" id="emptyState">
+          <div class="sound-orbit">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <h2>等待你的声音</h2>
+          <p>选择原语言，然后点击下方按钮开始同传</p>
+        </div>
+      </div>
+      <div class="thinking-row" id="thinkingRow" hidden>
+        <span></span><span></span><span></span>
+        <p>正在识别与翻译…</p>
+      </div>
+    </section>
+  </main>
+
+  <section class="control-dock" aria-label="同传控制台">
+    <div class="control-side input-controls">
+      <div class="compact-control">
+        <label for="languageSelect">原语言</label>
+        <select id="languageSelect">
+          <option value="en">英语</option>
+          <option value="ja">日语</option>
+          <option value="auto">自动识别（英语/日语）</option>
+        </select>
+      </div>
+      <div class="compact-control">
+        <label for="audioSourceSelect">声音来源</label>
+        <select id="audioSourceSelect">
+          <option value="microphone">麦克风（面对电脑说话）</option>
+          <option value="system">电脑声音（游戏/视频推荐）</option>
+          <option value="both">麦克风 + 电脑</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="main-control">
+      <div class="level-bars" id="levelBars" aria-hidden="true"></div>
+      <button class="record-button" id="recordButton" aria-label="开始同传">
+        <span class="record-ripple"></span>
+        <span class="record-core">
+          <svg class="mic-icon" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"/></svg>
+          <svg class="stop-icon" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+        </span>
+      </button>
+      <div class="record-copy"><strong id="recordLabel">开始同传</strong><small id="recordHint">点击开启麦克风</small></div>
+    </div>
+
+    <div class="control-side dock-actions">
+      <button id="exportButton" class="dock-button" disabled>
+        <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 15v5h14v-5"/></svg>
+        导出文本
+      </button>
+    </div>
+  </section>
+
+  <div class="toast-stack" id="toastStack" aria-live="assertive"></div>
+
+  <div class="update-overlay" id="updateOverlay" hidden>
+    <section class="update-card" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
+      <span class="update-badge">新版本可用</span>
+      <h2 id="updateTitle">译声可以更新</h2>
+      <p id="updateVersion">正在读取版本信息…</p>
+      <div class="update-notes" id="updateNotes"></div>
+      <div class="update-progress" id="updateProgress" hidden>
+        <div><span id="updateProgressBar"></span></div>
+        <small id="updateProgressText">准备下载…</small>
+      </div>
+      <p class="update-error" id="updateError" hidden></p>
+      <div class="update-actions">
+        <button class="secondary-button" id="updateLaterButton">稍后提醒</button>
+        <button class="primary-wide update-primary" id="updateActionButton">下载更新</button>
+      </div>
+      <small class="update-safe">更新包通过 HTTPS 下载并进行 SHA-256 完整性校验。</small>
+    </section>
+  </div>
+
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="settings-drawer" id="settingsDrawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div><p class="eyebrow">本机优化</p><h2>运行设置</h2></div>
+      <button class="icon-button" id="closeSettings" aria-label="关闭设置">
+        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="hardware-card">
+      <div class="hardware-icon">
+        <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M8 21h8M12 17v4M8 9h8M8 12h5"/></svg>
+      </div>
+      <div><strong id="gpuName">正在检测硬件…</strong><small id="hardwareMeta">请稍候</small></div>
+      <span class="hardware-state" id="hardwareState">检测中</span>
+    </div>
+
+    <div class="setting-group">
+      <label for="modelSelect">识别模型 <span>越大越准确，也越慢</span></label>
+      <select id="modelSelect">
+        <option value="tiny">Tiny · 极速 / 首次选择下载约 75 MB</option>
+        <option value="base">Base · 已内置 / 性能均衡</option>
+        <option value="small">Small · 更准确 / 首次选择下载约 484 MB</option>
+        <option value="medium">Medium · 高准确度 / 首次选择下载约 1.53 GB</option>
+      </select>
+      <div class="model-download-status" id="modelDownloadStatus">
+        <div><strong id="modelDownloadTitle">Base 已内置</strong><small id="modelDownloadDetail">选择其他模型后，点击“应用设置”开始下载</small></div>
+        <div class="model-download-track" id="modelDownloadTrack" hidden><span id="modelDownloadBar"></span></div>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <label for="deviceSelect">计算设备</label>
+      <select id="deviceSelect">
+        <option value="auto">自动选择</option>
+        <option value="cuda">NVIDIA GPU</option>
+        <option value="cpu">CPU</option>
+      </select>
+      <p class="field-help" id="deviceHelp">优先使用 GPU，运行库不可用时自动回退。</p>
+    </div>
+
+    <div class="setting-group">
+      <label for="systemDeviceSelect">电脑声音设备 <span>游戏与视频输出</span></label>
+      <select id="systemDeviceSelect">
+        <option value="">自动选择当前扬声器</option>
+      </select>
+      <p class="field-help" id="systemAudioHelp">自动捕获 Windows 正在播放的声音，不需要打开“立体声混音”。</p>
+    </div>
+
+    <div class="setting-group translation-model">
+      <label>中文翻译模型</label>
+      <div class="model-status-row">
+        <div><strong id="translationStatus">检查中…</strong><small id="translationDetail">英语、日语 → 中文</small></div>
+        <button id="installTranslationButton" class="small-button" hidden>修复</button>
+      </div>
+    </div>
+
+    <div class="setting-group cache-management">
+      <label>缓存管理 <span>保留已下载模型与字幕</span></label>
+      <div class="cache-status-row">
+        <div><strong id="cacheStatus">正在计算…</strong><small id="cacheDetail">临时音频、网页缓存与旧日志</small></div>
+        <button id="clearCacheButton" class="small-button">清理缓存</button>
+      </div>
+    </div>
+
+    <button id="saveSettingsButton" class="primary-wide">应用设置</button>
+
+    <section class="about-card" aria-labelledby="aboutTitle">
+      <p class="eyebrow">关于</p>
+      <h3 id="aboutTitle">译声 YiSheng</h3>
+      <dl>
+        <div><dt>Developer</dt><dd>Huyuanhao</dd></div>
+        <div><dt>版本</dt><dd id="aboutVersion">读取中…</dd></div>
+      </dl>
+      <p>Copyright © 2026 Huyuanhao</p>
+      <a id="officialRepository" href="https://github.com/shuidebao/Yisheng-Releases" target="_blank" rel="noreferrer">github.com/shuidebao/Yisheng-Releases</a>
+    </section>
+
+  </aside>
+
+  <script src="/static/app.js?v=ui" defer></script>
+</body>
+</html>
