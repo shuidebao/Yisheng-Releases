@@ -21,6 +21,7 @@ class TranscriptResult:
     original: str
     translation: str
     language: str
+    target_language: str
     language_probability: float
     latency_ms: int
     audio_seconds: float
@@ -178,12 +179,25 @@ class InterpreterEngine:
             self._model = self._create_model(model_path, "cpu", "int8")
         return self._model
 
+    def warm_up(self) -> None:
+        """Load the selected ASR model before the first live audio chunk."""
+        try:
+            with self._model_lock:
+                self._load_model()
+        except Exception as exc:
+            # Startup must remain usable even when a selected optional model or
+            # GPU runtime is unavailable. The normal transcription path will
+            # surface the same actionable error when the user starts listening.
+            self.last_error = f"语音模型预加载失败：{exc}"
+            LOGGER.warning("ASR warm-up failed: %s", exc)
+
     def transcribe(
         self,
         media_path: Path,
         source_language: str | None,
         audio_seconds: float = 0.0,
         context: str = "",
+        target_language: str = "zh",
     ) -> TranscriptResult:
         started = time.perf_counter()
         with self._model_lock:
@@ -238,13 +252,14 @@ class InterpreterEngine:
             continued = bool(context.strip() and original)
             if continued:
                 original = merge_continuation(context, original, detected)
-            translated = self.translator.translate(original, detected, "zh")
+            translated = self.translator.translate(original, detected, target_language)
 
         latency = int((time.perf_counter() - started) * 1000)
         return TranscriptResult(
             original=original,
             translation=translated.text,
             language=detected,
+            target_language=target_language,
             language_probability=round(probability, 3),
             latency_ms=latency,
             audio_seconds=round(audio_seconds, 2),

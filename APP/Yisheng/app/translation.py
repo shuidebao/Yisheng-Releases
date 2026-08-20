@@ -91,9 +91,15 @@ class _CTranslate2Model:
             .strip()
         )
 
+    def unload(self) -> None:
+        """Release an inactive route so language switching does not grow RAM forever."""
+        self._translator = None
+        self._source_tokenizer = None
+        self._target_tokenizer = None
+
 
 class OfflineTranslator:
-    """Bundled English/Japanese to Chinese translation; never downloads at runtime."""
+    """Bundled Chinese/English/Japanese translation; never downloads at runtime."""
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -118,24 +124,64 @@ class OfflineTranslator:
             source_eos=True,
         )
 
+        # Official Argos Chinese-English 1.9 CT2 package.
+        zh_root = ARGOS_MODEL_ROOT / "translate-zh_en-1_9"
+        self._zh_en = _CTranslate2Model(
+            zh_root / "model",
+            zh_root / "sentencepiece.model",
+            zh_root / "sentencepiece.model",
+        )
+
+        # Official Argos English-Japanese 1.1 CT2 package.
+        ja_target_root = ARGOS_MODEL_ROOT / "en_ja"
+        self._en_ja = _CTranslate2Model(
+            ja_target_root / "model",
+            ja_target_root / "sentencepiece.model",
+            ja_target_root / "sentencepiece.model",
+        )
+
+        self._models = {
+            "en-zh": self._en_zh,
+            "ja-en": self._ja_en,
+            "zh-en": self._zh_en,
+            "en-ja": self._en_ja,
+        }
+
+    def _route(self, source_code: str, target_code: str) -> list[_CTranslate2Model]:
+        if source_code == target_code:
+            return []
+        direct = self._models.get(f"{source_code}-{target_code}")
+        if direct is not None:
+            return [direct]
+        if source_code == "ja" and target_code == "zh":
+            return [self._ja_en, self._en_zh]
+        if source_code == "zh" and target_code == "ja":
+            return [self._zh_en, self._en_ja]
+        return []
+
+    def _activate(self, route: list[_CTranslate2Model]) -> None:
+        # At most two translation models stay resident. This matters after users
+        # switch among several language directions in one desktop session.
+        active = {id(model) for model in route}
+        for model in self._models.values():
+            if id(model) not in active:
+                model.unload()
+
     def installed_pairs(self) -> list[str]:
-        pairs: list[str] = []
-        if self._en_zh.available():
-            pairs.append("en-zh")
-        if self._en_zh.available() and self._ja_en.available():
-            pairs.append("ja-zh")
-        return pairs
+        return [
+            f"{source}-{target}"
+            for source in ("zh", "ja", "en")
+            for target in ("zh", "ja", "en")
+            if source != target and self.can_translate(source, target)
+        ]
 
     def can_translate(self, source_code: str, target_code: str = "zh") -> bool:
         if source_code == target_code:
-            return True
-        if target_code != "zh":
+            return source_code in {"zh", "ja", "en"}
+        if source_code not in {"zh", "ja", "en"} or target_code not in {"zh", "ja", "en"}:
             return False
-        if source_code == "en":
-            return self._en_zh.available()
-        if source_code == "ja":
-            return self._ja_en.available() and self._en_zh.available()
-        return False
+        route = self._route(source_code, target_code)
+        return bool(route) and all(model.available() for model in route)
 
     def translate(self, text: str, source_code: str, target_code: str = "zh") -> TranslationResult:
         if not text:
@@ -147,14 +193,16 @@ class OfflineTranslator:
                 "",
                 source_code,
                 False,
-                f"当前离线版仅内置英语、日语 → 中文翻译（识别到 {source_code}）。",
+                f"当前离线版无法完成 {source_code} → {target_code} 翻译，请重新安装译声。",
             )
 
         with self._lock:
             try:
-                if source_code == "ja":
-                    text = self._ja_en.translate(text)
-                translated = self._en_zh.translate(text)
+                route = self._route(source_code, target_code)
+                self._activate(route)
+                translated = text
+                for model in route:
+                    translated = model.translate(translated)
             except TranslationUnavailable:
                 raise
             except Exception as exc:
@@ -165,5 +213,5 @@ class OfflineTranslator:
         if self.can_translate(source_code, target_code):
             return []
         raise TranslationUnavailable(
-            "译声最终版不在用户电脑上下载模型；内置模型缺失，请重新下载安装包。"
+            "译声不在用户电脑上临时下载翻译模型；内置模型缺失，请重新下载安装包。"
         )

@@ -54,7 +54,7 @@ internal sealed class InstallerForm : Form
 
     internal InstallerForm(string initialPath = null)
     {
-        Text = "译声 " + InstallerVersion + " 离线完整版安装程序";
+        Text = "译声 YiSheng " + InstallerVersion + " Offline Installer";
         ClientSize = new Size(790, 500);
         MinimumSize = new Size(720, 470);
         StartPosition = FormStartPosition.CenterScreen;
@@ -65,7 +65,7 @@ internal sealed class InstallerForm : Form
         MaximizeBox = false;
 
         Label title = new Label();
-        title.Text = "译声 · 免费本地同声传译";
+        title.Text = "译声 YiSheng · 本地同声传译";
         title.Font = new Font("Microsoft YaHei UI", 21F, FontStyle.Bold);
         title.ForeColor = Color.FromArgb(205, 255, 65);
         title.AutoSize = true;
@@ -73,28 +73,29 @@ internal sealed class InstallerForm : Form
         Controls.Add(title);
 
         Label version = new Label();
-        version.Text = "版本 " + InstallerVersion + "  |  Windows 10/11 64 位  |  离线翻译 + 自动更新";
+        version.Text = "版本 / Version " + InstallerVersion + "  |  Windows 10/11 64-bit  |  离线 / Offline";
         version.AutoSize = true;
         version.ForeColor = Color.Gainsboro;
         version.Location = new Point(42, 82);
         Controls.Add(version);
 
         Label description = new Label();
-        description.Text = "安装包已包含 Python、全部依赖、Base 语音模型、英译中和日译中模型。\r\n模型安装完全离线；内存或磁盘不足时会直接说明原因。";
+        description.Text = "已包含 Base 语音识别和中 / 日 / 英互译模型，无需另外下载。\r\nIncludes Base speech recognition and offline Chinese / Japanese / English translation models.";
         description.AutoSize = true;
+        description.MaximumSize = new Size(705, 55);
         description.ForeColor = Color.Silver;
         description.Location = new Point(42, 122);
         Controls.Add(description);
 
         Label pathLabel = new Label();
-        pathLabel.Text = "安装位置";
+        pathLabel.Text = "安装位置 / Install location";
         pathLabel.AutoSize = true;
         pathLabel.Font = new Font(Font, FontStyle.Bold);
         pathLabel.Location = new Point(42, 186);
         Controls.Add(pathLabel);
 
         pathBox.Location = new Point(45, 216);
-        pathBox.Size = new Size(590, 30);
+        pathBox.Size = new Size(575, 30);
         pathBox.Text = String.IsNullOrWhiteSpace(initialPath)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Yisheng")
             : initialPath;
@@ -103,15 +104,16 @@ internal sealed class InstallerForm : Form
         pathBox.BorderStyle = BorderStyle.FixedSingle;
         Controls.Add(pathBox);
 
-        browseButton.Text = "浏览…";
-        browseButton.Location = new Point(650, 213);
-        browseButton.Size = new Size(100, 36);
+        browseButton.Text = "浏览 / Browse…";
+        browseButton.Location = new Point(630, 213);
+        browseButton.Size = new Size(120, 36);
         browseButton.Click += BrowseClicked;
         Controls.Add(browseButton);
 
         Label hint = new Label();
-        hint.Text = "需要至少 4 GB 运行内存和约 1.6 GB 可用磁盘空间。安装前会自动检查。";
+        hint.Text = "至少 4 GB 内存和约 1.6 GB 磁盘空间 / Requires 4 GB RAM and about 1.6 GB free disk space.";
         hint.AutoSize = true;
+        hint.MaximumSize = new Size(705, 42);
         hint.ForeColor = Color.Gray;
         hint.Location = new Point(43, 258);
         Controls.Add(hint);
@@ -121,19 +123,19 @@ internal sealed class InstallerForm : Form
         progressBar.Style = ProgressBarStyle.Continuous;
         Controls.Add(progressBar);
 
-        statusLabel.Text = "准备安装。";
+        statusLabel.Text = "准备安装 / Ready to install.";
         statusLabel.Location = new Point(43, 340);
         statusLabel.Size = new Size(707, 45);
         statusLabel.ForeColor = Color.LightGray;
         Controls.Add(statusLabel);
 
-        launchCheck.Text = "安装完成后启动译声";
+        launchCheck.Text = "安装完成后启动译声 / Launch YiSheng after installation";
         launchCheck.Checked = true;
         launchCheck.AutoSize = true;
         launchCheck.Location = new Point(45, 412);
         Controls.Add(launchCheck);
 
-        installButton.Text = String.IsNullOrWhiteSpace(initialPath) ? "开始安装" : "安装更新";
+        installButton.Text = String.IsNullOrWhiteSpace(initialPath) ? "安装 / Install" : "更新 / Update";
         installButton.BackColor = Color.FromArgb(205, 255, 65);
         installButton.ForeColor = Color.FromArgb(15, 18, 24);
         installButton.FlatStyle = FlatStyle.Flat;
@@ -437,6 +439,8 @@ internal sealed class InstallerForm : Form
             Path.Combine("runtime", "python312", "Lib", "site-packages", "faster_whisper", "__init__.py"),
             Path.Combine(".models", "whisper", "local", "base", "model.bin"),
             Path.Combine(".models", "argos", "translate-en_zh-1_9", "model", "model.bin"),
+            Path.Combine(".models", "argos", "translate-zh_en-1_9", "model", "model.bin"),
+            Path.Combine(".models", "argos", "en_ja", "model", "model.bin"),
             Path.Combine(".models", "translations", "ja_en", "model.bin"),
             Path.Combine("app", "main.py"),
             Path.Combine("static", "index.html")

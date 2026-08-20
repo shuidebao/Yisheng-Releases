@@ -21,6 +21,28 @@ DEFAULT_STYLE = {
     "translation_color": "#C7FF61",
 }
 
+OVERLAY_TEXT = {
+    "zh": {
+        "waiting": "等待原声…", "translation_waiting": "开始同传后，翻译会显示在这里",
+        "drag_help": "拖动顶部移动 · 右下角调整大小", "background_title": "译声字幕背景",
+        "window_title": "译声 · 桌面字幕", "style": "字幕样式", "transparency": "背景透明度",
+        "lock": "锁定窗口", "restore": "返回主界面", "unlock": "解除锁定",
+        "style_title": "译声 · 字幕样式", "style_heading": "分别设置原声识别字幕与翻译字幕",
+        "original": "原声识别", "translation": "翻译字幕", "text_color": "文字颜色",
+        "background": "背景透明", "reset": "恢复默认", "done": "完成",
+    },
+    "en": {
+        "waiting": "Waiting for speech…", "translation_waiting": "The translation will appear here",
+        "drag_help": "Drag the top bar to move · Resize from the bottom-right",
+        "background_title": "YiSheng subtitle background", "window_title": "YiSheng · Desktop subtitles",
+        "style": "Text style", "transparency": "Background", "lock": "Lock window",
+        "restore": "Main window", "unlock": "Unlock", "style_title": "YiSheng · Subtitle style",
+        "style_heading": "Customize recognized and translated subtitles", "original": "Recognized",
+        "translation": "Translation", "text_color": "Text color", "background": "Transparency",
+        "reset": "Reset", "done": "Done",
+    },
+}
+
 
 def _load_style() -> dict[str, Any]:
     style = dict(DEFAULT_STYLE)
@@ -46,11 +68,15 @@ class NativeLyricOverlay:
     MAX_WIDTH = 1800
     MAX_HEIGHT = 700
 
+    def _text(self, key: str) -> str:
+        return OVERLAY_TEXT[self._ui_language][key]
+
     def __init__(
         self,
         main_bounds: tuple[int, int, int, int],
         on_restore: Callable[[], Any],
         on_lock_changed: Callable[[bool], Any],
+        language: str = "zh",
     ) -> None:
         import clr
 
@@ -85,6 +111,7 @@ class NativeLyricOverlay:
         self._on_lock_changed = on_lock_changed
         self._main_bounds = main_bounds
         self._ui_thread: Any | None = None
+        self._application_context: Any | None = None
         self._ui_thread_id = int(threading.get_ident())
         self._command_queue: queue.Queue[
             tuple[Callable[[], None], threading.Event, list[BaseException]]
@@ -92,9 +119,11 @@ class NativeLyricOverlay:
         self._visible = False
         self._locked = False
         self._transparency = 100
-        self._original = "等待原声…"
-        self._translation = "开始同传后，中文翻译会显示在这里"
-        self._meta = "拖动顶部移动 · 右下角调整大小"
+        self._ui_language = "en" if language == "en" else "zh"
+        self._has_content = False
+        self._original = self._text("waiting")
+        self._translation = self._text("translation_waiting")
+        self._meta = self._text("drag_help")
         self._style = _load_style()
         self._original_font_size = int(self._style["original_size"])
         self._translation_font_size = int(self._style["translation_size"])
@@ -105,7 +134,7 @@ class NativeLyricOverlay:
         key = Color.FromArgb(255, *CHROMA_RGB)
 
         self.background = Form()
-        self.background.Text = "译声字幕背景"
+        self.background.Text = self._text("background_title")
         self.background.FormBorderStyle = getattr(FormBorderStyle, "None")
         self.background.StartPosition = FormStartPosition.Manual
         self.background.ShowInTaskbar = False
@@ -115,7 +144,7 @@ class NativeLyricOverlay:
         self.background.Size = Size(920, 250)
 
         self.form = Form()
-        self.form.Text = "译声 · 桌面字幕"
+        self.form.Text = self._text("window_title")
         self.form.FormBorderStyle = getattr(FormBorderStyle, "None")
         self.form.StartPosition = FormStartPosition.Manual
         self.form.ShowInTaskbar = False
@@ -134,7 +163,7 @@ class NativeLyricOverlay:
         self.form.Controls.Add(self.toolbar)
 
         self.title_label = Label()
-        self.title_label.Text = "译声 · 桌面字幕"
+        self.title_label.Text = self._text("window_title")
         self.title_label.ForeColor = Color.WhiteSmoke
         self.title_label.BackColor = Color.Transparent
         self.title_label.Font = Font("Microsoft YaHei UI", 9.0, FontStyle.Bold)
@@ -143,7 +172,7 @@ class NativeLyricOverlay:
         self.toolbar.Controls.Add(self.title_label)
 
         self.style_button = Button()
-        self.style_button.Text = "字幕样式"
+        self.style_button.Text = self._text("style")
         self.style_button.FlatStyle = FlatStyle.Flat
         self.style_button.BackColor = Color.FromArgb(75, 78, 85)
         self.style_button.ForeColor = Color.White
@@ -152,7 +181,7 @@ class NativeLyricOverlay:
         self.toolbar.Controls.Add(self.style_button)
 
         self.transparency_label = Label()
-        self.transparency_label.Text = "背景透明度"
+        self.transparency_label.Text = self._text("transparency")
         self.transparency_label.ForeColor = Color.Gainsboro
         self.transparency_label.AutoSize = True
         self.transparency_label.Anchor = AnchorStyles.Top | AnchorStyles.Right
@@ -179,7 +208,7 @@ class NativeLyricOverlay:
         self.toolbar.Controls.Add(self.value_label)
 
         self.lock_button = Button()
-        self.lock_button.Text = "锁定窗口"
+        self.lock_button.Text = self._text("lock")
         self.lock_button.FlatStyle = FlatStyle.Flat
         self.lock_button.BackColor = Color.FromArgb(75, 78, 85)
         self.lock_button.ForeColor = Color.White
@@ -189,7 +218,7 @@ class NativeLyricOverlay:
         self.toolbar.Controls.Add(self.lock_button)
 
         self.restore_button = Button()
-        self.restore_button.Text = "返回主界面"
+        self.restore_button.Text = self._text("restore")
         self.restore_button.FlatStyle = FlatStyle.Flat
         self.restore_button.BackColor = Color.FromArgb(199, 255, 97)
         self.restore_button.ForeColor = Color.FromArgb(15, 20, 10)
@@ -199,7 +228,7 @@ class NativeLyricOverlay:
         self.toolbar.Controls.Add(self.restore_button)
 
         self.unlock_button = Button()
-        self.unlock_button.Text = "解除锁定"
+        self.unlock_button.Text = self._text("unlock")
         self.unlock_button.FlatStyle = FlatStyle.Flat
         self.unlock_button.BackColor = Color.FromArgb(199, 255, 97)
         self.unlock_button.ForeColor = Color.FromArgb(15, 20, 10)
@@ -332,7 +361,7 @@ class NativeLyricOverlay:
         )
 
         self.style_form = Form()
-        self.style_form.Text = "译声 · 字幕样式"
+        self.style_form.Text = self._text("style_title")
         self.style_form.FormBorderStyle = FormBorderStyle.FixedToolWindow
         self.style_form.StartPosition = FormStartPosition.Manual
         self.style_form.ShowInTaskbar = False
@@ -341,18 +370,18 @@ class NativeLyricOverlay:
         self.style_form.BackColor = Color.FromArgb(31, 34, 42)
         self.style_form.ForeColor = Color.White
 
-        heading = Label()
-        heading.Text = "分别设置原声识别字幕与中文翻译字幕"
-        heading.AutoSize = True
-        heading.Font = Font("Microsoft YaHei UI", 10.0, FontStyle.Bold)
-        heading.Location = Point(18, 14)
-        self.style_form.Controls.Add(heading)
+        self.style_heading = Label()
+        self.style_heading.Text = self._text("style_heading")
+        self.style_heading.AutoSize = True
+        self.style_heading.Font = Font("Microsoft YaHei UI", 10.0, FontStyle.Bold)
+        self.style_heading.Location = Point(18, 14)
+        self.style_form.Controls.Add(self.style_heading)
 
-        original_name = Label()
-        original_name.Text = "原声识别"
-        original_name.AutoSize = True
-        original_name.Location = Point(18, 61)
-        self.style_form.Controls.Add(original_name)
+        self.original_name = Label()
+        self.original_name.Text = self._text("original")
+        self.original_name.AutoSize = True
+        self.original_name.Location = Point(18, 61)
+        self.style_form.Controls.Add(self.original_name)
 
         self.original_size_slider = TrackBar()
         self.original_size_slider.Minimum = 12
@@ -371,18 +400,18 @@ class NativeLyricOverlay:
         self.style_form.Controls.Add(self.original_size_value)
 
         self.original_color_button = Button()
-        self.original_color_button.Text = "文字颜色"
+        self.original_color_button.Text = self._text("text_color")
         self.original_color_button.FlatStyle = FlatStyle.Flat
         self.original_color_button.Size = Size(96, 32)
         self.original_color_button.Location = Point(390, 50)
         self._set_color_button(self.original_color_button, self._original_color)
         self.style_form.Controls.Add(self.original_color_button)
 
-        translation_name = Label()
-        translation_name.Text = "中文翻译"
-        translation_name.AutoSize = True
-        translation_name.Location = Point(18, 117)
-        self.style_form.Controls.Add(translation_name)
+        self.translation_name = Label()
+        self.translation_name.Text = self._text("translation")
+        self.translation_name.AutoSize = True
+        self.translation_name.Location = Point(18, 117)
+        self.style_form.Controls.Add(self.translation_name)
 
         self.translation_size_slider = TrackBar()
         self.translation_size_slider.Minimum = 16
@@ -401,18 +430,18 @@ class NativeLyricOverlay:
         self.style_form.Controls.Add(self.translation_size_value)
 
         self.translation_color_button = Button()
-        self.translation_color_button.Text = "文字颜色"
+        self.translation_color_button.Text = self._text("text_color")
         self.translation_color_button.FlatStyle = FlatStyle.Flat
         self.translation_color_button.Size = Size(96, 32)
         self.translation_color_button.Location = Point(390, 106)
         self._set_color_button(self.translation_color_button, self._translation_color)
         self.style_form.Controls.Add(self.translation_color_button)
 
-        background_name = Label()
-        background_name.Text = "背景透明"
-        background_name.AutoSize = True
-        background_name.Location = Point(18, 173)
-        self.style_form.Controls.Add(background_name)
+        self.background_name = Label()
+        self.background_name.Text = self._text("background")
+        self.background_name.AutoSize = True
+        self.background_name.Location = Point(18, 173)
+        self.style_form.Controls.Add(self.background_name)
 
         self.style_transparency_slider = TrackBar()
         self.style_transparency_slider.Minimum = 0
@@ -430,23 +459,23 @@ class NativeLyricOverlay:
         self.style_transparency_value.Location = Point(334, 173)
         self.style_form.Controls.Add(self.style_transparency_value)
 
-        reset_button = Button()
-        reset_button.Text = "恢复默认"
-        reset_button.FlatStyle = FlatStyle.Flat
-        reset_button.BackColor = Color.FromArgb(75, 78, 85)
-        reset_button.ForeColor = Color.White
-        reset_button.Size = Size(96, 34)
-        reset_button.Location = Point(282, 222)
-        self.style_form.Controls.Add(reset_button)
+        self.reset_button = Button()
+        self.reset_button.Text = self._text("reset")
+        self.reset_button.FlatStyle = FlatStyle.Flat
+        self.reset_button.BackColor = Color.FromArgb(75, 78, 85)
+        self.reset_button.ForeColor = Color.White
+        self.reset_button.Size = Size(96, 34)
+        self.reset_button.Location = Point(282, 222)
+        self.style_form.Controls.Add(self.reset_button)
 
-        close_button = Button()
-        close_button.Text = "完成"
-        close_button.FlatStyle = FlatStyle.Flat
-        close_button.BackColor = Color.FromArgb(199, 255, 97)
-        close_button.ForeColor = Color.FromArgb(15, 20, 10)
-        close_button.Size = Size(96, 34)
-        close_button.Location = Point(390, 222)
-        self.style_form.Controls.Add(close_button)
+        self.close_style_button = Button()
+        self.close_style_button.Text = self._text("done")
+        self.close_style_button.FlatStyle = FlatStyle.Flat
+        self.close_style_button.BackColor = Color.FromArgb(199, 255, 97)
+        self.close_style_button.ForeColor = Color.FromArgb(15, 20, 10)
+        self.close_style_button.Size = Size(96, 34)
+        self.close_style_button.Location = Point(390, 222)
+        self.style_form.Controls.Add(self.close_style_button)
 
         self._color_dialog = ColorDialog()
         self._color_dialog.FullOpen = True
@@ -455,8 +484,8 @@ class NativeLyricOverlay:
         self.style_transparency_slider.ValueChanged += self._on_style_transparency_changed
         self.original_color_button.Click += lambda *_: self._choose_color("original")
         self.translation_color_button.Click += lambda *_: self._choose_color("translation")
-        reset_button.Click += lambda *_: self._reset_style()
-        close_button.Click += lambda *_: self.style_form.Hide()
+        self.reset_button.Click += lambda *_: self._reset_style()
+        self.close_style_button.Click += lambda *_: self.style_form.Hide()
         self.style_form.FormClosing += self._on_style_form_closing
 
     def _show_style_form(self) -> None:
@@ -563,6 +592,9 @@ class NativeLyricOverlay:
         return {
             "visible": self._visible,
             "locked": self._locked,
+            "ui_language": self._ui_language,
+            "window_title": str(self.form.Text),
+            "style_button": str(self.style_button.Text),
             "transparency": self._transparency,
             "width": int(self.form.Width),
             "height": int(self.form.Height),
@@ -706,6 +738,13 @@ class NativeLyricOverlay:
             self.background.Close()
         except Exception:
             pass
+        if self._closing:
+            # FormClosed runs on the overlay's own WinForms thread. Ending the
+            # thread here is reliable even when the main WebView is closing at
+            # the same time and avoids leaving a background process behind.
+            if self._application_context is not None:
+                self._application_context.ExitThread()
+            return
         if not self._closing:
             # Closing the mini subtitle is equivalent to "return to main".
             # Otherwise the pywebview host remains minimized and the whole app
@@ -746,8 +785,6 @@ class NativeLyricOverlay:
 
     def close(self) -> None:
         def action() -> None:
-            from System.Windows.Forms import Application
-
             self._command_timer.Stop()
             self._closing = True
             if not self.style_form.IsDisposed:
@@ -756,15 +793,47 @@ class NativeLyricOverlay:
                 self.form.Close()
             if not self.background.IsDisposed:
                 self.background.Close()
-            Application.ExitThread()
+            if self._application_context is not None:
+                self._application_context.ExitThread()
 
         self._invoke(action)
 
     def update(self, original: str, translation: str, meta: str) -> None:
         def action() -> None:
-            self._original = original or "等待原声…"
-            self._translation = translation or "开始同传后，中文翻译会显示在这里"
-            self._meta = meta or "拖动顶部移动 · 右下角调整大小"
+            self._has_content = bool(original or translation)
+            self._original = original or self._text("waiting")
+            self._translation = translation or self._text("translation_waiting")
+            self._meta = meta or self._text("drag_help")
+            self.form.Invalidate()
+
+        self._invoke(action)
+
+    def set_ui_language(self, language: str) -> None:
+        locale = "en" if language == "en" else "zh"
+
+        def action() -> None:
+            self._ui_language = locale
+            self.background.Text = self._text("background_title")
+            self.form.Text = self._text("window_title")
+            self.title_label.Text = self._text("window_title")
+            self.style_button.Text = self._text("style")
+            self.transparency_label.Text = self._text("transparency")
+            self.lock_button.Text = self._text("lock")
+            self.restore_button.Text = self._text("restore")
+            self.unlock_button.Text = self._text("unlock")
+            self.style_form.Text = self._text("style_title")
+            self.style_heading.Text = self._text("style_heading")
+            self.original_name.Text = self._text("original")
+            self.translation_name.Text = self._text("translation")
+            self.original_color_button.Text = self._text("text_color")
+            self.translation_color_button.Text = self._text("text_color")
+            self.background_name.Text = self._text("background")
+            self.reset_button.Text = self._text("reset")
+            self.close_style_button.Text = self._text("done")
+            if not self._has_content:
+                self._original = self._text("waiting")
+                self._translation = self._text("translation_waiting")
+                self._meta = self._text("drag_help")
             self.form.Invalidate()
 
         self._invoke(action)
@@ -853,10 +922,11 @@ def create_native_overlay(
     main_window: Any,
     on_restore: Callable[[], Any],
     on_lock_changed: Callable[[bool], Any],
+    language: str = "zh",
 ) -> NativeLyricOverlay:
     from System import Action
     from System.Threading import ApartmentState, Thread, ThreadStart
-    from System.Windows.Forms import Application
+    from System.Windows.Forms import Application, ApplicationContext
     from webview.platforms.winforms import BrowserView
 
     main_form = BrowserView.instances.get(main_window.uid)
@@ -886,11 +956,12 @@ def create_native_overlay(
 
     def run_overlay_loop() -> None:
         try:
-            overlay = NativeLyricOverlay(main_bounds[0], on_restore, on_lock_changed)
+            overlay = NativeLyricOverlay(main_bounds[0], on_restore, on_lock_changed, language)
+            overlay._application_context = ApplicationContext()
             created.append(overlay)
             ready.set()
             LOGGER.info("Native desktop lyric message loop started")
-            Application.Run()
+            Application.Run(overlay._application_context)
             LOGGER.info("Native desktop lyric message loop stopped")
         except BaseException as exc:
             failures.append(exc)

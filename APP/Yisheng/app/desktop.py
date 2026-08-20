@@ -199,6 +199,7 @@ class DesktopBridge:
         self._latest_subtitle: dict[str, str] = {"original": "", "translation": "", "meta": ""}
         self._overlay_locked = False
         self._overlay_positioned = False
+        self._ui_language = "zh"
 
     def get_app_info(self) -> dict[str, Any]:
         hardware = detect_hardware()
@@ -217,7 +218,17 @@ class DesktopBridge:
         return dict(self._latest_subtitle)
 
     def get_overlay_state(self) -> dict[str, Any]:
-        return {**self._latest_subtitle, "locked": self._overlay_locked}
+        return {
+            **self._latest_subtitle,
+            "locked": self._overlay_locked,
+            "ui_language": self._ui_language,
+        }
+
+    def set_ui_language(self, language: str) -> dict[str, Any]:
+        self._ui_language = "en" if language == "en" else "zh"
+        if self._native_overlay is not None:
+            self._native_overlay.set_ui_language(self._ui_language)
+        return {"ok": True, "language": self._ui_language}
 
     def show_overlay(self) -> dict[str, Any]:
         if self._window is None or self._native_overlay is None:
@@ -341,10 +352,10 @@ class DesktopBridge:
         except Exception:
             LOGGER.debug("Native overlay is not ready yet", exc_info=True)
 
-    @staticmethod
-    def default_export_name() -> str:
+    def default_export_name(self) -> str:
         stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        return f"译声同传_{stamp}.txt"
+        prefix = "YiSheng_Transcript" if self._ui_language == "en" else "译声同传"
+        return f"{prefix}_{stamp}.txt"
 
     def save_transcript(self, content: str) -> dict[str, Any]:
         if not isinstance(content, str) or not content.strip():
@@ -360,7 +371,11 @@ class DesktopBridge:
             selected = self._window.create_file_dialog(
                 webview.FileDialog.SAVE,
                 save_filename=self.default_export_name(),
-                file_types=("文本文件 (*.txt)", "所有文件 (*.*)"),
+                file_types=(
+                    ("Text files (*.txt)", "All files (*.*)")
+                    if self._ui_language == "en"
+                    else ("文本文件 (*.txt)", "所有文件 (*.*)")
+                ),
             )
             if not selected:
                 return {"ok": False, "cancelled": True}
@@ -466,23 +481,28 @@ def main() -> int:
             capabilities = None
             while time.monotonic() < deadline:
                 try:
-                    capabilities = window.evaluate_js(
-                        "({"
-                        "microphone: Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),"
-                        "desktopBridge: Boolean(window.pywebview && window.pywebview.api && window.pywebview.api.get_app_info),"
-                        "recordButton: Boolean(document.getElementById('recordButton'))," 
-                        "audioSource: Boolean(document.getElementById('audioSourceSelect'))," 
-                        "about: Boolean(document.getElementById('aboutVersion') && document.getElementById('officialRepository'))," 
-                        "styles: Array.from(document.styleSheets).some(s => (s.href || '').includes('styles.css'))," 
-                        "appReady: document.documentElement.dataset.appReady === '1'"
-                        "})"
-                    )
+                    capability_script = "".join([
+                        "({",
+                        "microphone: Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),",
+                        "desktopBridge: Boolean(window.pywebview && window.pywebview.api && window.pywebview.api.get_app_info),",
+                        "recordButton: Boolean(document.getElementById('recordButton')),",
+                        "audioSource: Boolean(document.getElementById('audioSourceSelect')),",
+                        "targetLanguage: Boolean(document.getElementById('targetLanguageSelect')),",
+                        "languageToggle: Boolean(document.getElementById('languageToggle')),",
+                        "about: Boolean(document.getElementById('aboutVersion') && document.getElementById('officialRepository')),",
+                        "styles: Array.from(document.styleSheets).some(s => (s.href || '').includes('styles.css')),",
+                        "appReady: document.documentElement.dataset.appReady === '1'",
+                        "})",
+                    ])
+                    capabilities = window.evaluate_js(capability_script)
                     startup_state["interactive"] = bool(
                         capabilities
                         and capabilities.get("microphone")
                         and capabilities.get("desktopBridge")
                         and capabilities.get("recordButton")
                         and capabilities.get("audioSource")
+                        and capabilities.get("targetLanguage")
+                        and capabilities.get("languageToggle")
                         and capabilities.get("about")
                         and capabilities.get("styles")
                         and capabilities.get("appReady")
@@ -507,21 +527,23 @@ def main() -> int:
                     window,
                     bridge.restore_main,
                     bridge._on_native_lock_changed,
+                    bridge._ui_language,
                 )
 
-                def close_desktop_windows() -> None:
-                    try:
-                        if bridge._native_overlay is not None:
-                            bridge._native_overlay.close()
-                    finally:
-                        # pywebview's automatic Application.Exit can be skipped
-                        # when a second WinForms message loop was active. Exit
-                        # normally here so the backend reaches its finally block.
-                        from System.Windows.Forms import Application
+                def close_native_overlay() -> None:
+                    # Run before the WebView host form is disposed. Otherwise
+                    # WinForms can close the overlay form first, leaving its
+                    # parameterless message loop alive with no visible window.
+                    if bridge._native_overlay is not None:
+                        bridge._native_overlay.close()
 
-                        Application.Exit()
+                def finish_desktop_close() -> None:
+                    from System.Windows.Forms import Application
 
-                window.events.closed += close_desktop_windows
+                    Application.Exit()
+
+                window.events.closing += close_native_overlay
+                window.events.closed += finish_desktop_close
                 LOGGER.info("Windows native desktop lyric overlay ready")
             except Exception as exc:
                 startup_state["error"] = f"Windows 桌面歌词窗口初始化失败：{exc}"
@@ -530,6 +552,15 @@ def main() -> int:
                 return
 
             if smoke_test:
+                language_capabilities = window.evaluate_js(
+                    "setUiLanguage('en'); ({"
+                    "language: localStorage.getItem('yisheng-ui-language'),"
+                    "title: document.title,"
+                    "settings: document.getElementById('settingsButton').getAttribute('title'),"
+                    "target: document.querySelector('label[for=\"targetLanguageSelect\"]').textContent"
+                    "})"
+                )
+                bridge.set_ui_language("en")
                 bridge.update_overlay({
                     "original": "Overlay smoke test",
                     "translation": "迷你字幕测试",
@@ -559,9 +590,17 @@ def main() -> int:
                 blocked_resize = bridge.resize_overlay(800, 240)
                 time.sleep(0.25)
                 overlay_capabilities = bridge._native_overlay.debug_state()
+                LOGGER.info("English UI interaction capabilities: %s", language_capabilities)
                 LOGGER.info("Native overlay interaction capabilities: %s", overlay_capabilities)
                 overlay_ok = bool(
                     overlay_capabilities
+                    and language_capabilities
+                    and language_capabilities.get("language") == "en"
+                    and language_capabilities.get("title") == "YiSheng · Local Live Interpreter"
+                    and language_capabilities.get("settings") == "Settings"
+                    and language_capabilities.get("target") == "Translate to"
+                    and overlay_capabilities.get("ui_language") == "en"
+                    and overlay_capabilities.get("style_button") == "Text style"
                     and overlay_capabilities.get("locked")
                     and overlay_capabilities.get("transparency") == 100
                     and not overlay_capabilities.get("background_visible")

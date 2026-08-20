@@ -47,7 +47,7 @@ Write-Host ("[1/5] Rebuilding the {0} desktop launcher..." -f $Version) -Foregro
 & (Join-Path $SourcePath "build_desktop.ps1")
 if ($LASTEXITCODE -ne 0) { throw "Desktop launcher build failed." }
 
-Write-Host "[2/5] Checking the offline Base, English and Japanese models..." -ForegroundColor Cyan
+Write-Host "[2/5] Checking the offline Base and three-language translation models..." -ForegroundColor Cyan
 $Required = @(
     "VERSION",
     "Yisheng.exe",
@@ -56,6 +56,8 @@ $Required = @(
     "runtime\python312\Lib\site-packages\faster_whisper\__init__.py",
     ".models\whisper\local\base\model.bin",
     ".models\argos\translate-en_zh-1_9\model\model.bin",
+    ".models\argos\translate-zh_en-1_9\model\model.bin",
+    ".models\argos\en_ja\model\model.bin",
     ".models\translations\ja_en\model.bin",
     "app\main.py",
     "static\index.html"
@@ -75,6 +77,8 @@ $TarArguments = @(
     "--exclude=.models/webview-test-profile",
     "--exclude=.models/webview-probe-profile",
     "--exclude=.models/overlay-style.json",
+    "--exclude=.models/packages",
+    "--exclude=.models/argos-state",
     "--exclude=logs",
     "--exclude=__pycache__",
     "--exclude=*.pyc",

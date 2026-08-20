@@ -31,6 +31,10 @@ system_audio = SystemAudioManager()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # Pay the one-time Base model load cost while the splash/window is opening,
+    # rather than after the first live chunk has already been recorded. Awaiting
+    # the worker also guarantees no warm-up thread survives application exit.
+    await asyncio.to_thread(engine.warm_up)
     try:
         yield
     finally:
@@ -65,7 +69,7 @@ class EngineConfig(BaseModel):
 
 class SystemAudioConfig(BaseModel):
     device_index: int | None = None
-    chunk_seconds: float = 3.6
+    chunk_seconds: float = 1.8
 
 
 @app.get("/api/health")
@@ -194,11 +198,13 @@ def update_config(config: EngineConfig) -> dict:
 
 
 @app.post("/api/models/translation/{source_code}")
-async def install_translation_model(source_code: str) -> dict:
+async def install_translation_model(source_code: str, target: str = Query("zh")) -> dict:
     if source_code not in LANGUAGES or source_code == "auto":
         raise HTTPException(status_code=400, detail="请先选择明确的原语言。")
+    if target not in {"zh", "ja", "en"}:
+        raise HTTPException(status_code=400, detail="不支持的翻译目标语言。")
     try:
-        installed = await asyncio.to_thread(engine.translator.install_pair, source_code, "zh")
+        installed = await asyncio.to_thread(engine.translator.install_pair, source_code, target)
         return {"ok": True, "installed": installed, "pairs": engine.translator.installed_pairs()}
     except TranslationUnavailable as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -212,9 +218,12 @@ async def transcribe(
     language: str = Query("auto"),
     duration: float = Query(0.0, ge=0.0, le=3600.0),
     context: str = Query("", max_length=240),
+    target: str = Query("zh"),
 ) -> JSONResponse:
     if language not in LANGUAGES:
         raise HTTPException(status_code=400, detail="不支持的语言。")
+    if target not in {"zh", "ja", "en"}:
+        raise HTTPException(status_code=400, detail="不支持的翻译目标语言。")
     body = await request.body()
     if not body:
         raise HTTPException(status_code=400, detail="没有收到音频。")
@@ -228,7 +237,7 @@ async def transcribe(
             handle.write(body)
             path = Path(handle.name)
         source = LANGUAGES[language]["whisper"] or None
-        result = await asyncio.to_thread(engine.transcribe, path, source, duration, context)
+        result = await asyncio.to_thread(engine.transcribe, path, source, duration, context, target)
         return JSONResponse(result.to_dict())
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

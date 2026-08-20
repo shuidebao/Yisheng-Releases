@@ -45,8 +45,8 @@ class SystemAudioManager:
         self._thread: threading.Thread | None = None
         self._chunks: queue.Queue[AudioChunk] = queue.Queue(maxsize=4)
         self._device: LoopbackDevice | None = None
-        self._chunk_seconds = 3.6
-        self._overlap_seconds = 0.75
+        self._chunk_seconds = 1.8
+        self._overlap_seconds = 0.5
         self._level = 0.0
         self._error: str | None = None
 
@@ -102,7 +102,7 @@ class SystemAudioManager:
                 "error": self._error,
             }
 
-    def start(self, device_index: int | None = None, chunk_seconds: float = 3.6) -> dict:
+    def start(self, device_index: int | None = None, chunk_seconds: float = 1.8) -> dict:
         with self._lock:
             if self.running:
                 return self.status()
@@ -115,7 +115,7 @@ class SystemAudioManager:
 
             self._drain_chunks()
             self._device = selected
-            self._chunk_seconds = min(8.0, max(1.5, float(chunk_seconds)))
+            self._chunk_seconds = min(8.0, max(1.2, float(chunk_seconds)))
             self._level = 0.0
             self._error = None
             self._stop.clear()

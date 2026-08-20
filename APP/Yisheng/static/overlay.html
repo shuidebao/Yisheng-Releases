@@ -9,9 +9,9 @@
 <body>
   <main class="overlay-shell" id="overlayShell">
     <div class="overlay-toolbar pywebview-drag-region">
-      <span class="overlay-name">译声 · 置顶字幕</span>
+      <span class="overlay-name" id="overlayName">译声 · 置顶字幕</span>
       <div class="overlay-actions">
-        <label for="opacitySlider">背景透明度</label>
+        <label for="opacitySlider" id="opacityLabel">背景透明度</label>
         <input id="opacitySlider" type="range" min="0" max="100" step="5" value="55" aria-label="字幕背景透明度，一百为完全透明">
         <output id="opacityValue">55%</output>
         <button id="lockButton" class="lock-button" type="button">锁定窗口</button>
@@ -20,7 +20,7 @@
     </div>
     <section class="subtitle-panel" aria-live="polite">
       <p class="original" id="originalText">等待原声…</p>
-      <p class="translation" id="translationText">开始同传后，中文翻译会显示在这里</p>
+      <p class="translation" id="translationText">开始同传后，翻译会显示在这里</p>
       <small id="subtitleMeta">窗口始终置顶 · 拖动顶部区域可移动</small>
     </section>
     <button class="resize-handle" id="resizeHandle" type="button" aria-label="拖动调整窗口大小" title="拖动调整窗口大小"><span></span></button>

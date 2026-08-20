@@ -150,5 +150,8 @@ def detect_hardware() -> HardwareInfo:
 
 def recommended_profile(hardware: HardwareInfo) -> dict[str, str | float]:
     if hardware.cuda_runtime_ready and (hardware.vram_mb or 0) >= 6000:
-        return {"model": "base", "device": "cuda", "compute_type": "float16", "chunk_seconds": 4.2}
-    return {"model": "base", "device": "cpu", "compute_type": "int8", "chunk_seconds": 4.8}
+        # Short rolling chunks let the UI publish a provisional sentence while
+        # the speaker is still talking. The existing overlap/context merge then
+        # revises that same row instead of waiting for a complete 4+ second clip.
+        return {"model": "base", "device": "cuda", "compute_type": "float16", "chunk_seconds": 1.4}
+    return {"model": "base", "device": "cpu", "compute_type": "int8", "chunk_seconds": 1.8}
