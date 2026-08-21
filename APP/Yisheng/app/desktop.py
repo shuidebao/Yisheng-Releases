@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import uvicorn
 
@@ -27,6 +27,7 @@ HOST = "127.0.0.1"
 APP_TITLE = "译声 · 本地同声传译"
 ACTIVATE_EVENT_NAME = r"Local\Yisheng_Interpreter_Activate"
 QUIT_EVENT_NAME = r"Local\Yisheng_Interpreter_Quit"
+BACKEND_START_TIMEOUT_SECONDS = 120.0
 
 
 def find_free_port(host: str = HOST) -> int:
@@ -35,9 +36,15 @@ def find_free_port(host: str = HOST) -> int:
         return int(probe.getsockname()[1])
 
 
-def wait_for_health(url: str, timeout: float = 20.0) -> bool:
+def wait_for_health(
+    url: str,
+    timeout: float = BACKEND_START_TIMEOUT_SECONDS,
+    is_running: Callable[[], bool] | None = None,
+) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        if is_running is not None and not is_running():
+            return False
         try:
             with urllib.request.urlopen(f"{url}/api/health", timeout=0.8) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -56,12 +63,13 @@ class LocalBackend:
         self.url = f"http://{HOST}:{self.port}"
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
+        self._startup_error: BaseException | None = None
 
     @property
     def running(self) -> bool:
         return bool(self._thread and self._thread.is_alive() and self._server and self._server.started)
 
-    def start(self, timeout: float = 20.0) -> None:
+    def start(self, timeout: float = BACKEND_START_TIMEOUT_SECONDS) -> None:
         if self.running:
             return
         config = uvicorn.Config(
@@ -76,21 +84,45 @@ class LocalBackend:
             log_config=None,
         )
         self._server = uvicorn.Server(config)
+        self._startup_error = None
+
+        def run_server() -> None:
+            try:
+                self._server.run()
+            except BaseException as exc:
+                self._startup_error = exc
+                LOGGER.exception("Local backend thread failed during startup")
+
         self._thread = threading.Thread(
-            target=self._server.run,
+            target=run_server,
             name="yisheng-local-backend",
             daemon=True,
         )
+        started_at = time.monotonic()
+        LOGGER.info("Starting local backend; cold-start timeout is %.0f seconds", timeout)
         self._thread.start()
-        if not wait_for_health(self.url, timeout):
+        if not wait_for_health(
+            self.url,
+            timeout,
+            is_running=lambda: bool(self._thread and self._thread.is_alive()),
+        ):
+            startup_error = self._startup_error
+            thread_alive = bool(self._thread and self._thread.is_alive())
             self.stop()
-            raise RuntimeError("本地同传后端启动超时。")
+            if startup_error is not None:
+                raise RuntimeError(f"本地同传后端启动失败：{startup_error}") from startup_error
+            if not thread_alive:
+                raise RuntimeError("本地同传后端启动进程提前结束。")
+            raise RuntimeError(f"本地同传后端首次启动超过 {timeout:.0f} 秒，请重新启动应用。")
+        LOGGER.info("Local backend ready after %.1f seconds", time.monotonic() - started_at)
 
     def stop(self, timeout: float = 5.0) -> None:
         if self._server:
             self._server.should_exit = True
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
+            if self._thread.is_alive():
+                LOGGER.warning("Local backend thread did not stop within %.1f seconds", timeout)
         self._server = None
         self._thread = None
 
@@ -438,6 +470,7 @@ def main() -> int:
     app_control: WindowsAppControl | None = None
     smoke_test = os.getenv("YISHENG_DESKTOP_SMOKE_TEST") == "1"
     visual_overlay_test = os.getenv("YISHENG_OVERLAY_VISUAL_TEST") == "1"
+    fatal_error: str | None = None
     try:
         backend.start()
         bridge = DesktopBridge()
@@ -661,12 +694,17 @@ def main() -> int:
         return 0
     except Exception as exc:
         LOGGER.exception("Desktop application failed")
-        _show_fatal_error(f"译声启动失败：\n{exc}\n\n详细信息已写入 logs\\desktop.log。")
-        return 1
+        fatal_error = f"译声启动失败：\n{exc}\n\n详细信息已写入 logs\\desktop.log。"
     finally:
         if app_control is not None:
             app_control.stop()
         backend.stop()
+    if fatal_error is not None:
+        # Stop the backend before showing the blocking dialog. Otherwise a
+        # timed-out cold-start worker can keep loading models behind the error.
+        _show_fatal_error(fatal_error)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
