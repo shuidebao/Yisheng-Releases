@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 import inspect
+import sys
+import types
 import unittest
 from unittest.mock import patch
+
+# GitHub Actions intentionally runs the lightweight source tests without the
+# bundled desktop runtime. The tests below only exercise dependency-free
+# startup control, so provide an import placeholder when uvicorn is absent.
+try:
+    import uvicorn  # noqa: F401
+except ModuleNotFoundError:
+    sys.modules["uvicorn"] = types.ModuleType("uvicorn")
 
 from app.desktop import BACKEND_START_TIMEOUT_SECONDS, LocalBackend, wait_for_health
 
