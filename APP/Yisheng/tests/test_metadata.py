@@ -23,11 +23,20 @@ class ProjectMetadataTests(unittest.TestCase):
         )
 
     def test_standard_installer_name_is_update_safe(self) -> None:
+        filename = f"YiSheng-Setup-{app.__version__}.exe"
         self.assertEqual(
-            _safe_filename("YiSheng-Setup-1.0.11.exe"),
-            "YiSheng-Setup-1.0.11.exe",
+            _safe_filename(filename),
+            filename,
         )
-        self.assertGreater(_version_tuple("1.0.11"), _version_tuple("1.0.10"))
+        self.assertGreater(_version_tuple(app.__version__), _version_tuple("1.0.11"))
+
+    def test_installer_shortcuts_are_locale_safe_and_nonfatal(self) -> None:
+        repository = Path(__file__).resolve().parents[3]
+        source = (repository / "installer" / "OfflineInstaller.cs").read_text(encoding="utf-8")
+        self.assertIn('SpecialFolder.Programs), "Yisheng"', source)
+        self.assertNotIn('SpecialFolder.Programs), "译声"', source)
+        self.assertIn("string shortcutWarning = createShortcuts ? CreateShortcuts(target) : null;", source)
+        self.assertIn("UseShellExecute = false", source)
 
     def test_about_elements_exist(self) -> None:
         root = Path(__file__).resolve().parent.parent

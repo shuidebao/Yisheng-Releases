@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -22,6 +23,12 @@ internal sealed class PackageInfo
     internal long Offset;
     internal long Length;
     internal byte[] Sha256;
+}
+
+internal sealed class InstallResult
+{
+    internal string Target;
+    internal string ShortcutWarning;
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
@@ -210,8 +217,8 @@ internal sealed class InstallerForm : Form
     private void InstallInBackground(object sender, DoWorkEventArgs e)
     {
         string target = (string)e.Argument;
-        InstallPackage(target, delegate(int percent, string text) { worker.ReportProgress(percent, text); }, true);
-        e.Result = target;
+        string shortcutWarning = InstallPackage(target, delegate(int percent, string text) { worker.ReportProgress(percent, text); }, true);
+        e.Result = new InstallResult { Target = target, ShortcutWarning = shortcutWarning };
     }
 
     private void WorkerProgressChanged(object sender, ProgressChangedEventArgs e)
@@ -232,10 +239,13 @@ internal sealed class InstallerForm : Form
             return;
         }
 
-        string target = (string)e.Result;
+        InstallResult result = (InstallResult)e.Result;
+        string target = result.Target;
         progressBar.Value = 100;
         statusLabel.ForeColor = Color.FromArgb(205, 255, 65);
-        statusLabel.Text = "安装完成。桌面快捷方式已经创建，现在可以直接使用译声。";
+        statusLabel.Text = String.IsNullOrEmpty(result.ShortcutWarning)
+            ? "安装完成。桌面和开始菜单快捷方式已经创建。"
+            : "安装完成，但部分快捷方式未能创建。可直接运行安装目录中的 Yisheng.exe。";
         installButton.Text = "完成";
         installButton.Enabled = true;
         installButton.Click -= InstallClicked;
@@ -243,8 +253,22 @@ internal sealed class InstallerForm : Form
 
         if (launchCheck.Checked)
         {
-            try { Process.Start(Path.Combine(target, "Yisheng.exe")); }
-            catch { }
+            try
+            {
+                string executable = Path.Combine(target, "Yisheng.exe");
+                if (!File.Exists(executable)) throw new FileNotFoundException("安装后的启动文件不存在。", executable);
+                Process.Start(new ProcessStartInfo {
+                    FileName = executable,
+                    WorkingDirectory = target,
+                    UseShellExecute = false
+                });
+            }
+            catch (Exception ex)
+            {
+                statusLabel.Text = "应用已安装完成，但自动启动失败。请从安装目录运行 Yisheng.exe。";
+                WriteErrorLog(new IOException("应用已安装完成，但自动启动失败。", ex));
+                MessageBox.Show(this, "译声已经安装完成，但自动启动失败。\r\n\r\n请从安装目录运行：\r\n" + Path.Combine(target, "Yisheng.exe"), "译声启动失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
     }
 
@@ -258,7 +282,7 @@ internal sealed class InstallerForm : Form
         catch { }
     }
 
-    internal static void InstallPackage(string target, Action<int, string> report, bool createShortcuts)
+    internal static string InstallPackage(string target, Action<int, string> report, bool createShortcuts)
     {
         PackageInfo info = ReadPackageInfo(Application.ExecutablePath);
         CheckComputerResources(target, info);
@@ -270,8 +294,9 @@ internal sealed class InstallerForm : Form
             ExtractPackage(tempZip, target, report);
             RemoveObsoleteComponents(target);
             VerifyInstallation(target);
-            if (createShortcuts) CreateShortcuts(target);
+            string shortcutWarning = createShortcuts ? CreateShortcuts(target) : null;
             report(100, "安装完成。");
+            return shortcutWarning;
         }
         finally
         {
@@ -505,23 +530,65 @@ internal sealed class InstallerForm : Form
         }
     }
 
-    private static void CreateShortcuts(string target)
+    private static string CreateShortcuts(string target)
     {
         string executable = Path.Combine(target, "Yisheng.exe");
-        CreateShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Yisheng.lnk"), executable, target);
-        string menu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "译声");
-        Directory.CreateDirectory(menu);
-        CreateShortcut(Path.Combine(menu, "Yisheng.lnk"), executable, target);
+        List<string> warnings = new List<string>();
+
+        TryCreateShortcut(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Yisheng.lnk"),
+            executable,
+            target,
+            "桌面",
+            warnings);
+
+        // Keep the directory name ASCII-safe. WScript.Shell can convert a non-ASCII
+        // shortcut path to "??" on Windows installations using a non-CJK system locale.
+        string menu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Yisheng");
+        try
+        {
+            Directory.CreateDirectory(menu);
+            TryCreateShortcut(Path.Combine(menu, "Yisheng.lnk"), executable, target, "开始菜单", warnings);
+        }
+        catch (Exception ex)
+        {
+            warnings.Add("开始菜单快捷方式：" + DescribeException(ex));
+        }
+
+        if (warnings.Count == 0) return null;
+        string warning = String.Join(Environment.NewLine, warnings.ToArray());
+        WriteErrorLog(new IOException("应用文件已安装完成，但部分快捷方式创建失败。" + Environment.NewLine + warning));
+        return warning;
+    }
+
+    private static void TryCreateShortcut(string shortcutPath, string executable, string workingDirectory, string label, List<string> warnings)
+    {
+        try
+        {
+            CreateShortcut(shortcutPath, executable, workingDirectory);
+        }
+        catch (Exception ex)
+        {
+            warnings.Add(label + "快捷方式：" + DescribeException(ex));
+        }
+    }
+
+    private static string DescribeException(Exception error)
+    {
+        Exception current = error;
+        while (current.InnerException != null) current = current.InnerException;
+        return current.GetType().Name + ": " + current.Message;
     }
 
     private static void CreateShortcut(string shortcutPath, string executable, string workingDirectory)
     {
         Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-        if (shellType == null) return;
+        if (shellType == null) throw new InvalidOperationException("Windows Script Host 不可用。");
         object shell = Activator.CreateInstance(shellType);
+        object shortcut = null;
         try
         {
-            object shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath });
+            shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath });
             Type shortcutType = shortcut.GetType();
             shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { executable });
             shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { workingDirectory });
@@ -531,6 +598,7 @@ internal sealed class InstallerForm : Form
         }
         finally
         {
+            if (shortcut != null && System.Runtime.InteropServices.Marshal.IsComObject(shortcut)) System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shortcut);
             if (shell != null && System.Runtime.InteropServices.Marshal.IsComObject(shell)) System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
         }
     }
