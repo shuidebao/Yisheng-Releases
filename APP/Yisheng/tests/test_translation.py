@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
-from app.translation import OfflineTranslator
+from app.translation import _CTranslate2Model, OfflineTranslator, TranslationUnavailable
 
 
 class _FakeModel:
@@ -16,6 +19,11 @@ class _FakeModel:
         return f"{self.name}({text})"
 
     def unload(self) -> None:
+        return None
+
+
+class _InvalidResultModel(_FakeModel):
+    def translate(self, text: str) -> None:
         return None
 
 
@@ -68,6 +76,45 @@ class ThreeLanguageTranslationTests(unittest.TestCase):
             result = self.translator.translate("same", language, language)
             self.assertTrue(result.ready)
             self.assertEqual(result.text, "same")
+
+    def test_invalid_pivot_result_is_reported_without_none_type_error(self) -> None:
+        invalid = _InvalidResultModel("ja-en")
+        self.translator._ja_en = invalid
+        self.translator._models["ja-en"] = invalid
+
+        with self.assertRaisesRegex(TranslationUnavailable, "无效结果"):
+            self.translator.translate("こんにちは", "ja", "zh")
+
+
+class TranslationModelStateTests(unittest.TestCase):
+    def test_incomplete_loaded_state_is_rebuilt_as_one_unit(self) -> None:
+        model = _CTranslate2Model(Path("model"), Path("source.spm"), Path("target.spm"))
+        stale_translator = object()
+        rebuilt_translator = object()
+        source_tokenizer = object()
+        target_tokenizer = object()
+        tokenizers = iter((source_tokenizer, target_tokenizer))
+        model._translator = stale_translator
+
+        fake_ctranslate2 = SimpleNamespace(Translator=lambda *args, **kwargs: rebuilt_translator)
+        fake_sentencepiece = SimpleNamespace(
+            SentencePieceProcessor=lambda **kwargs: next(tokenizers)
+        )
+        with (
+            mock.patch.object(model, "available", return_value=True),
+            mock.patch.dict(
+                "sys.modules",
+                {"ctranslate2": fake_ctranslate2, "sentencepiece": fake_sentencepiece},
+            ),
+        ):
+            loaded = model._load()
+
+        self.assertEqual(loaded, (rebuilt_translator, source_tokenizer, target_tokenizer))
+
+    def test_non_string_model_input_has_actionable_error(self) -> None:
+        model = _CTranslate2Model(Path("model"), Path("source.spm"), Path("target.spm"))
+        with self.assertRaisesRegex(TranslationUnavailable, "无效文本"):
+            model.translate(None)
 
 
 if __name__ == "__main__":

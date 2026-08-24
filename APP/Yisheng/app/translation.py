@@ -50,7 +50,17 @@ class _CTranslate2Model:
     def _load(self):
         if not self.available():
             raise TranslationUnavailable("内置翻译模型不完整，请重新安装译声。")
-        if self._translator is None:
+        components = (
+            self._translator,
+            self._source_tokenizer,
+            self._target_tokenizer,
+        )
+        if any(component is None for component in components):
+            # Loading can fail after CTranslate2 has initialized but before both
+            # SentencePiece processors are ready. Never retain that partial
+            # state: the next utterance must rebuild the complete model instead
+            # of calling encode/decode on None.
+            self.unload()
             try:
                 import ctranslate2
                 import sentencepiece as spm
@@ -60,18 +70,25 @@ class _CTranslate2Model:
             # Four CPU threads provides a good latency/load balance on ordinary
             # Windows PCs; CT2 internally schedules the vectorized kernels.
             threads = max(1, min(4, os.cpu_count() or 2))
-            self._translator = ctranslate2.Translator(
+            translator = ctranslate2.Translator(
                 str(self.model_dir),
                 device="cpu",
                 compute_type="int8",
                 inter_threads=1,
                 intra_threads=threads,
             )
-            self._source_tokenizer = spm.SentencePieceProcessor(model_file=str(self.source_spm))
-            self._target_tokenizer = spm.SentencePieceProcessor(model_file=str(self.target_spm))
+            source_tokenizer = spm.SentencePieceProcessor(model_file=str(self.source_spm))
+            target_tokenizer = spm.SentencePieceProcessor(model_file=str(self.target_spm))
+            self._translator = translator
+            self._source_tokenizer = source_tokenizer
+            self._target_tokenizer = target_tokenizer
         return self._translator, self._source_tokenizer, self._target_tokenizer
 
     def translate(self, text: str) -> str:
+        if not isinstance(text, str):
+            raise TranslationUnavailable("离线翻译收到无效文本，请重试。")
+        if not text.strip():
+            return ""
         translator, source_tokenizer, target_tokenizer = self._load()
         tokens = source_tokenizer.encode(text, out_type=str)
         if self.source_eos:
@@ -203,6 +220,8 @@ class OfflineTranslator:
                 translated = text
                 for model in route:
                     translated = model.translate(translated)
+                    if not isinstance(translated, str):
+                        raise TranslationUnavailable("离线翻译模型返回了无效结果，请重试。")
             except TranslationUnavailable:
                 raise
             except Exception as exc:
