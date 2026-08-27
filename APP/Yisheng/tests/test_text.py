@@ -38,6 +38,32 @@ class TranscriptCleanupTests(unittest.TestCase):
             "this is one continuous sentence with a clear ending.",
         )
 
+    def test_repairs_english_words_split_at_chunk_boundaries(self) -> None:
+        self.assertEqual(
+            merge_continuation(
+                "When people speak continuously, the interpret-",
+                "The interpreter should keep the words connected",
+                "en",
+            ),
+            "When people speak continuously, the interpreter should keep the words connected",
+        )
+        self.assertEqual(
+            merge_continuation("so that the-", "the final translation is complete", "en"),
+            "so that the final translation is complete",
+        )
+        self.assertEqual(
+            merge_continuation("one complete---", "sentence instead of fragments", "en"),
+            "one complete sentence instead of fragments",
+        )
+        self.assertEqual(
+            merge_continuation(
+                "one complete--- sentence instead of several unrelated-",
+                "fragments.",
+                "en",
+            ),
+            "one complete--- sentence instead of several unrelated fragments.",
+        )
+
     def test_merges_japanese_chunk_overlap(self) -> None:
         self.assertEqual(
             merge_continuation("これは一つの文章です", "文章です続きがあります。", "ja"),

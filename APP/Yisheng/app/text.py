@@ -97,6 +97,28 @@ def merge_overlap(previous: str, current: str, max_words: int = 12) -> str:
     return current
 
 
+def _merge_partial_word_boundary(previous: str, current: str, max_words: int = 4) -> str | None:
+    """Replace a hyphenated trailing fragment with its full word in the next chunk."""
+    old_words = previous.split()
+    new_words = current.split()
+    max_width = min(max_words, len(old_words), len(new_words))
+    for width in range(max_width, 0, -1):
+        old_tail = old_words[-width:]
+        new_head = new_words[:width]
+        if any(
+            _token_key(old_word) != _token_key(new_word)
+            for old_word, new_word in zip(old_tail[:-1], new_head[:-1])
+        ):
+            continue
+        partial = _token_key(old_tail[-1])
+        complete = _token_key(new_head[-1])
+        if not old_tail[-1].rstrip().endswith("-") or not partial or not complete.startswith(partial):
+            continue
+        merged = old_words[:-width] + old_tail[:-1] + new_words[width - 1 :]
+        return " ".join(merged)
+    return None
+
+
 def merge_continuation(previous: str, current: str, language: str | None = None) -> str:
     """Join adjacent live chunks and remove their intentional audio overlap."""
     previous = clean_transcript(previous)
@@ -116,5 +138,12 @@ def merge_continuation(previous: str, current: str, language: str | None = None)
                 break
         return clean_transcript(old_compact + new_compact)
 
+    partial_merge = _merge_partial_word_boundary(previous, current)
+    if partial_merge is not None:
+        return clean_transcript(partial_merge)
+
+    # Whisper also appends one or more hyphens when a chunk stops after a
+    # complete word. They are boundary markers, not spoken punctuation.
+    previous = re.sub(r"-+$", "", previous).rstrip()
     remainder = merge_overlap(previous, current, max_words=20)
     return clean_transcript(f"{previous} {remainder}" if remainder else previous)

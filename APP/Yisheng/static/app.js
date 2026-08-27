@@ -196,6 +196,8 @@ const state = {
   sampleRate: 48000,
   chunkSeconds: 1.8,
   overlapSeconds: 0.5,
+  captureChunkSeconds: 1.8,
+  captureOverlapSeconds: 0.5,
   queue: [],
   processing: false,
   segments: [],
@@ -637,7 +639,7 @@ function ingestSamples(samples) {
   state.buffers.push(samples);
   state.bufferedFrames += samples.length;
   updateLevel(samples);
-  if (state.bufferedFrames >= state.sampleRate * state.chunkSeconds) flushAudio(false);
+  if (state.bufferedFrames >= state.sampleRate * state.captureChunkSeconds) flushAudio(false);
 }
 
 function concatenate(buffers, totalLength) {
@@ -704,7 +706,7 @@ function flushAudio(finalChunk) {
     state.buffers = [];
     state.bufferedFrames = 0;
   } else {
-    const overlapFrames = Math.min(combined.length, Math.floor(state.sampleRate * state.overlapSeconds));
+    const overlapFrames = Math.min(combined.length, Math.floor(state.sampleRate * state.captureOverlapSeconds));
     const overlap = combined.slice(combined.length - overlapFrames);
     state.buffers = [overlap];
     state.bufferedFrames = overlap.length;
@@ -745,23 +747,33 @@ async function processQueue() {
   try {
     const previous = state.segments.at(-1);
     const sameStream = previous?.audio_source === (chunk.audioSource || "microphone");
-    const explicitSameLanguage = source !== "auto" && previous?.language === source;
+    const confidentAutoLanguage = source === "auto"
+      && ["zh", "ja", "en"].includes(previous?.language)
+      && Number(previous?.language_probability || 0) >= .7
+      && (Date.now() - Number(previous?._receivedAt || 0)) < 4200;
+    const requestLanguage = confidentAutoLanguage ? previous.language : source;
+    const sameLanguage = requestLanguage !== "auto" && previous?.language === requestLanguage;
     const sameTarget = previous?.target_language === state.captureTarget;
     // Short Whisper windows sometimes add a full stop even while somebody is
     // still speaking. Treat nearby chunks from the same stream as one rolling
     // utterance so the existing row and its translation can be revised with
     // the newly heard words. A long pause or 180 characters starts a new row.
     const recent = previous && (Date.now() - Number(previous._receivedAt || 0)) < 4200;
-    const context = sameStream && sameTarget && explicitSameLanguage && recent && previous.original.length <= 180
+    const context = sameStream && sameTarget && sameLanguage && recent && previous.original.length <= 180
       ? previous.original
       : "";
-    const result = await api(`/api/transcribe?language=${encodeURIComponent(source)}&target=${encodeURIComponent(state.captureTarget)}&duration=${chunk.duration.toFixed(2)}&context=${encodeURIComponent(context)}`, {
+    const result = await api(`/api/transcribe?language=${encodeURIComponent(requestLanguage)}&target=${encodeURIComponent(state.captureTarget)}&duration=${chunk.duration.toFixed(2)}&context=${encodeURIComponent(context)}`, {
       method: "POST",
       headers: { "Content-Type": "audio/wav" },
       body: chunk.blob,
     });
     result.audio_source = chunk.audioSource || "microphone";
     result._receivedAt = Date.now();
+    if (source === "auto" && ["ja", "en"].includes(result.language) && result.language_probability >= .7) {
+      const autoJapanese = result.language === "ja";
+      state.captureChunkSeconds = Math.max(state.chunkSeconds, autoJapanese ? 3.2 : 2.8);
+      state.captureOverlapSeconds = Math.max(state.overlapSeconds, autoJapanese ? .8 : .7);
+    }
     if (result.original) appendSegment(result);
     if (result.warning) toast(result.warning, result.translation_ready ? "info" : "error", 6500);
   } catch (error) {
@@ -881,7 +893,7 @@ async function pollSystemAudio() {
         try { detail = (await response.json()).detail || detail; } catch { /* no-op */ }
         throw new Error(detail);
       }
-      const duration = Number(response.headers.get("X-Audio-Duration")) || state.chunkSeconds;
+      const duration = Number(response.headers.get("X-Audio-Duration")) || state.captureChunkSeconds;
       const level = Number(response.headers.get("X-Audio-Level")) || 0;
       const blob = await response.blob();
       updateLevelMeter(level);
@@ -906,7 +918,7 @@ async function startSystemAudioCapture() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       device_index: rawDeviceIndex === "" ? null : Number(rawDeviceIndex),
-      chunk_seconds: state.chunkSeconds,
+      chunk_seconds: state.captureChunkSeconds,
     }),
   });
   state.systemAudioActive = true;
@@ -943,6 +955,14 @@ async function startRecording() {
   state.captureLanguage = elements.languageSelect.value;
   state.captureTarget = elements.targetLanguageSelect.value;
   state.captureMode = elements.audioSourceSelect.value;
+  const japaneseCapture = state.captureLanguage === "ja";
+  const englishCapture = state.captureLanguage === "en";
+  state.captureChunkSeconds = japaneseCapture
+    ? Math.max(state.chunkSeconds, 3.2)
+    : englishCapture ? Math.max(state.chunkSeconds, 2.8) : state.chunkSeconds;
+  state.captureOverlapSeconds = japaneseCapture
+    ? Math.max(state.overlapSeconds, .8)
+    : englishCapture ? Math.max(state.overlapSeconds, .7) : state.overlapSeconds;
   state.recording = true;
   state.buffers = [];
   state.bufferedFrames = 0;

@@ -16,6 +16,36 @@ from .whisper_models import ALLOWED_MODELS, ensure_whisper_model
 LOGGER = logging.getLogger(__name__)
 
 
+def _transcription_options(source_language: str | None, context: str = "") -> dict:
+    """Return conservative decode settings, with extra context for Japanese and English."""
+    japanese = source_language == "ja"
+    english = source_language == "en"
+    options = {
+        "language": source_language or None,
+        "beam_size": 3 if japanese else 2 if english else 1,
+        "best_of": 1,
+        "condition_on_previous_text": False,
+        "no_repeat_ngram_size": 3,
+        "vad_filter": True,
+        "vad_parameters": {
+            "min_silence_duration_ms": 450 if japanese else 380 if english else 280,
+            "speech_pad_ms": 180 if japanese else 160 if english else 120,
+        },
+        "compression_ratio_threshold": 2.0,
+        "log_prob_threshold": -0.8,
+        "no_speech_threshold": 0.55,
+        "hallucination_silence_threshold": 1.0,
+        "temperature": 0.0,
+    }
+    prompt = context.strip()
+    if (japanese or english) and prompt:
+        # A short tail helps Whisper keep words and sentence endings across
+        # rolling chunks without letting an old mistake dominate the next one.
+        prompt_chars = 80 if japanese else 120
+        options["initial_prompt"] = prompt[-prompt_chars:]
+    return options
+
+
 @dataclass
 class TranscriptResult:
     original: str
@@ -202,21 +232,11 @@ class InterpreterEngine:
         started = time.perf_counter()
         with self._model_lock:
             model = self._load_model()
+            decode_options = _transcription_options(source_language, context)
             try:
                 segments, info = model.transcribe(
                     str(media_path),
-                    language=source_language or None,
-                    beam_size=1,
-                    best_of=1,
-                    condition_on_previous_text=False,
-                    no_repeat_ngram_size=3,
-                    vad_filter=True,
-                    vad_parameters={"min_silence_duration_ms": 280, "speech_pad_ms": 120},
-                    compression_ratio_threshold=2.0,
-                    log_prob_threshold=-0.8,
-                    no_speech_threshold=0.55,
-                    hallucination_silence_threshold=1.0,
-                    temperature=0.0,
+                    **decode_options,
                 )
                 original = clean_transcript(" ".join(segment.text for segment in segments))
             except Exception as exc:
@@ -233,17 +253,7 @@ class InterpreterEngine:
                 self._model = self._create_model(ensure_whisper_model(self.model_name), "cpu", "int8")
                 segments, info = self._model.transcribe(
                     str(media_path),
-                    language=source_language or None,
-                    beam_size=1,
-                    condition_on_previous_text=False,
-                    no_repeat_ngram_size=3,
-                    vad_filter=True,
-                    vad_parameters={"min_silence_duration_ms": 280, "speech_pad_ms": 120},
-                    compression_ratio_threshold=2.0,
-                    log_prob_threshold=-0.8,
-                    no_speech_threshold=0.55,
-                    hallucination_silence_threshold=1.0,
-                    temperature=0.0,
+                    **decode_options,
                 )
                 original = clean_transcript(" ".join(segment.text for segment in segments))
 
