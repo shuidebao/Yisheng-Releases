@@ -64,7 +64,7 @@ class NativeLyricOverlay:
     """Windows-native desktop lyric overlay hosted by the pywebview UI thread."""
 
     MIN_WIDTH = 480
-    MIN_HEIGHT = 130
+    MIN_HEIGHT = 300
     MAX_WIDTH = 1800
     MAX_HEIGHT = 700
 
@@ -121,6 +121,7 @@ class NativeLyricOverlay:
         self._transparency = 100
         self._ui_language = "en" if language == "en" else "zh"
         self._has_content = False
+        self._history: list[str] = []
         self._original = self._text("waiting")
         self._translation = self._text("translation_waiting")
         self._meta = self._text("drag_help")
@@ -141,7 +142,7 @@ class NativeLyricOverlay:
         self.background.TopMost = True
         self.background.BackColor = Color.Black
         self.background.Opacity = 0.45
-        self.background.Size = Size(920, 250)
+        self.background.Size = Size(920, 360)
 
         self.form = Form()
         self.form.Text = self._text("window_title")
@@ -153,7 +154,7 @@ class NativeLyricOverlay:
         self.form.BackColor = key
         self.form.TransparencyKey = key
         self.form.AutoScaleMode = AutoScaleMode.Dpi
-        self.form.Size = Size(920, 250)
+        self.form.Size = Size(920, 360)
         self.form.MinimumSize = Size(self.MIN_WIDTH, self.MIN_HEIGHT)
 
         self.toolbar = Panel()
@@ -246,7 +247,7 @@ class NativeLyricOverlay:
         self.resize_grip.BackColor = Color.FromArgb(55, 58, 64)
         self.resize_grip.Size = Size(28, 28)
         self.resize_grip.Anchor = AnchorStyles.Bottom | AnchorStyles.Right
-        self.resize_grip.Location = Point(892, 222)
+        self.resize_grip.Location = Point(892, 332)
         self.form.Controls.Add(self.resize_grip)
         self.resize_grip.BringToFront()
 
@@ -606,6 +607,8 @@ class NativeLyricOverlay:
             "translation_font_size": self._translation_font_size,
             "original_color": self._color_hex(self._original_color),
             "translation_color": self._color_hex(self._translation_color),
+            "history": list(self._history),
+            "history_visible": bool(self._history),
             "handle": handle,
             "handle_exists": bool(ctypes.windll.user32.IsWindow(handle)),
             "thread_alive": bool(self._ui_thread and self._ui_thread.IsAlive),
@@ -667,10 +670,42 @@ class NativeLyricOverlay:
         height = max(1, self.form.ClientSize.Height)
         top = 0 if self._locked else self.toolbar.Height
         content_height = max(80, height - top)
-        meta_size = max(8.0, min(11.0, content_height * 0.05))
-        original_rect = RectangleF(20.0, top + content_height * 0.05, width - 40.0, content_height * 0.29)
-        translation_rect = RectangleF(20.0, top + content_height * 0.32, width - 40.0, content_height * 0.48)
-        meta_rect = RectangleF(20.0, top + content_height * 0.82, width - 40.0, content_height * 0.14)
+        meta_size = max(8.0, min(11.0, content_height * 0.04))
+        history_lines = self._history[-4:]
+        has_history = bool(history_lines)
+        if has_history:
+            original_rect = RectangleF(
+                20.0,
+                top + content_height * 0.02,
+                width - 40.0,
+                content_height * 0.16,
+            )
+            meta_rect = RectangleF(
+                20.0,
+                top + content_height * 0.87,
+                width - 40.0,
+                content_height * 0.11,
+            )
+        else:
+            original_rect = RectangleF(
+                20.0,
+                top + content_height * 0.05,
+                width - 40.0,
+                content_height * 0.29,
+            )
+            translation_rect = RectangleF(
+                20.0,
+                top + content_height * 0.32,
+                width - 40.0,
+                content_height * 0.48,
+            )
+            meta_rect = RectangleF(
+                20.0,
+                top + content_height * 0.82,
+                width - 40.0,
+                content_height * 0.14,
+            )
+
         original_size = self._fitted_text_size(
             self._original,
             float(self._original_font_size),
@@ -678,18 +713,19 @@ class NativeLyricOverlay:
             original_rect.Width,
             original_rect.Height,
         )
-        translation_size = self._fitted_text_size(
-            self._translation,
-            float(self._translation_font_size),
-            16.0,
-            translation_rect.Width,
-            translation_rect.Height,
-        )
         alignment = StringFormat()
         alignment.Alignment = StringAlignment.Center
         alignment.LineAlignment = StringAlignment.Center
-        original_luminance = int(self._original_color.R) * 299 + int(self._original_color.G) * 587 + int(self._original_color.B) * 114
-        translation_luminance = int(self._translation_color.R) * 299 + int(self._translation_color.G) * 587 + int(self._translation_color.B) * 114
+        original_luminance = (
+            int(self._original_color.R) * 299
+            + int(self._original_color.G) * 587
+            + int(self._original_color.B) * 114
+        )
+        translation_luminance = (
+            int(self._translation_color.R) * 299
+            + int(self._translation_color.G) * 587
+            + int(self._translation_color.B) * 114
+        )
         original_shadow = SolidBrush(
             self._Color.FromArgb(245, 255, 255, 255)
             if original_luminance < 90000
@@ -700,34 +736,128 @@ class NativeLyricOverlay:
             if translation_luminance < 90000
             else self._Color.FromArgb(245, 0, 0, 0)
         )
+        history_shadow = SolidBrush(self._Color.FromArgb(235, 0, 0, 0))
         meta_shadow = SolidBrush(self._Color.FromArgb(245, 0, 0, 0))
         original_brush = SolidBrush(self._original_color)
         translation_brush = SolidBrush(self._translation_color)
+        history_brush = SolidBrush(self._Color.FromArgb(235, 218, 224, 235))
         muted = SolidBrush(self._Color.FromArgb(220, 220, 220))
-        original_font = self._Font("Microsoft YaHei UI", original_size, self._FontStyle.Bold)
-        translation_font = self._Font("Microsoft YaHei UI", translation_size, self._FontStyle.Bold)
-        meta_font = self._Font("Microsoft YaHei UI", meta_size, self._FontStyle.Regular)
+        original_font = self._Font(
+            "Microsoft YaHei UI",
+            original_size,
+            self._FontStyle.Bold,
+        )
+        meta_font = self._Font(
+            "Microsoft YaHei UI",
+            meta_size,
+            self._FontStyle.Regular,
+        )
+
+        def draw_text(rect: Any, text: str, font: Any, brush: Any, shadow: Any) -> None:
+            shadow_rect = RectangleF(
+                rect.X + 2.0,
+                rect.Y + 2.0,
+                rect.Width,
+                rect.Height,
+            )
+            graphics.DrawString(text, font, shadow, shadow_rect, alignment)
+            graphics.DrawString(text, font, brush, rect, alignment)
+
         try:
-            for rect, text, font, brush, shadow in (
-                (original_rect, self._original, original_font, original_brush, original_shadow),
-                (translation_rect, self._translation, translation_font, translation_brush, translation_shadow),
-            ):
-                shadow_rect = RectangleF(rect.X + 2.0, rect.Y + 2.0, rect.Width, rect.Height)
-                graphics.DrawString(text, font, shadow, shadow_rect, alignment)
-                graphics.DrawString(text, font, brush, rect, alignment)
-            graphics.DrawString(self._meta, meta_font, meta_shadow, RectangleF(meta_rect.X + 1, meta_rect.Y + 1, meta_rect.Width, meta_rect.Height), alignment)
+            draw_text(
+                original_rect,
+                self._original,
+                original_font,
+                original_brush,
+                original_shadow,
+            )
+            if has_history:
+                row_step = content_height * 0.165
+                row_height = content_height * 0.155
+                first_slot = 4 - len(history_lines)
+                previous_size = max(
+                    14.0,
+                    min(20.0, float(self._translation_font_size) * 0.72),
+                )
+                for index, line in enumerate(history_lines):
+                    slot = first_slot + index
+                    rect = RectangleF(
+                        20.0,
+                        top + content_height * 0.20 + row_step * slot,
+                        width - 40.0,
+                        row_height,
+                    )
+                    current = index == len(history_lines) - 1
+                    size = self._fitted_text_size(
+                        line,
+                        float(self._translation_font_size) if current else previous_size,
+                        16.0 if current else 12.0,
+                        rect.Width,
+                        rect.Height,
+                    )
+                    font = self._Font(
+                        "Microsoft YaHei UI",
+                        size,
+                        self._FontStyle.Bold if current else self._FontStyle.Regular,
+                    )
+                    try:
+                        draw_text(
+                            rect,
+                            line,
+                            font,
+                            translation_brush if current else history_brush,
+                            translation_shadow if current else history_shadow,
+                        )
+                    finally:
+                        font.Dispose()
+            else:
+                translation_size = self._fitted_text_size(
+                    self._translation,
+                    float(self._translation_font_size),
+                    16.0,
+                    translation_rect.Width,
+                    translation_rect.Height,
+                )
+                translation_font = self._Font(
+                    "Microsoft YaHei UI",
+                    translation_size,
+                    self._FontStyle.Bold,
+                )
+                try:
+                    draw_text(
+                        translation_rect,
+                        self._translation,
+                        translation_font,
+                        translation_brush,
+                        translation_shadow,
+                    )
+                finally:
+                    translation_font.Dispose()
+            graphics.DrawString(
+                self._meta,
+                meta_font,
+                meta_shadow,
+                RectangleF(
+                    meta_rect.X + 1,
+                    meta_rect.Y + 1,
+                    meta_rect.Width,
+                    meta_rect.Height,
+                ),
+                alignment,
+            )
             graphics.DrawString(self._meta, meta_font, muted, meta_rect, alignment)
         finally:
             for resource in (
                 alignment,
                 original_shadow,
                 translation_shadow,
+                history_shadow,
                 meta_shadow,
                 original_brush,
                 translation_brush,
+                history_brush,
                 muted,
                 original_font,
-                translation_font,
                 meta_font,
             ):
                 resource.Dispose()
@@ -798,9 +928,20 @@ class NativeLyricOverlay:
 
         self._invoke(action)
 
-    def update(self, original: str, translation: str, meta: str) -> None:
+    def update(
+        self,
+        original: str,
+        translation: str,
+        meta: str,
+        history: list[str] | None = None,
+    ) -> None:
         def action() -> None:
             self._has_content = bool(original or translation)
+            self._history = [
+                str(line).strip()[:600]
+                for line in (history or [])
+                if str(line).strip()
+            ][-4:]
             self._original = original or self._text("waiting")
             self._translation = translation or self._text("translation_waiting")
             self._meta = meta or self._text("drag_help")

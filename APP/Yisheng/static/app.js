@@ -839,6 +839,7 @@ function appendSegment(result) {
       original: result.original,
       translation: result.translation_ready ? result.translation : tr("translationModelUnavailable"),
       meta: `${timestamp} · ${modelLabels[result.model] || result.model} · ${result.latency_ms} ms`,
+      replace_latest: continuing,
     }).catch(() => {});
   }
 }

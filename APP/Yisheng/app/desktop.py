@@ -221,6 +221,7 @@ class DesktopBridge:
     """Small, explicit bridge for interactions that need Windows UI."""
 
     MAX_EXPORT_CHARS = 2_000_000
+    OVERLAY_HISTORY_LIMIT = 4
 
     def __init__(self) -> None:
         # Keep native objects private. pywebview exposes public JS API members
@@ -229,6 +230,7 @@ class DesktopBridge:
         self._overlay_window: Any | None = None
         self._native_overlay: Any | None = None
         self._latest_subtitle: dict[str, str] = {"original": "", "translation": "", "meta": ""}
+        self._overlay_history: list[dict[str, str]] = []
         self._overlay_locked = False
         self._overlay_positioned = False
         self._ui_language = "zh"
@@ -252,6 +254,8 @@ class DesktopBridge:
     def get_overlay_state(self) -> dict[str, Any]:
         return {
             **self._latest_subtitle,
+            "history": self._overlay_history_lines(),
+            "history_count": len(self._overlay_history),
             "locked": self._overlay_locked,
             "ui_language": self._ui_language,
         }
@@ -332,18 +336,39 @@ class DesktopBridge:
     def update_overlay(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(payload, dict):
             return {"ok": False, "error": "字幕数据无效。"}
-        self._latest_subtitle = {
+        subtitle = {
             "original": str(payload.get("original") or "")[:4000],
             "translation": str(payload.get("translation") or "")[:4000],
             "meta": str(payload.get("meta") or "")[:300],
         }
+        replace_latest = bool(payload.get("replace_latest"))
+        same_as_latest = bool(
+            self._overlay_history
+            and self._overlay_history[-1]["original"] == subtitle["original"]
+            and self._overlay_history[-1]["translation"] == subtitle["translation"]
+        )
+        if self._overlay_history and (replace_latest or same_as_latest):
+            self._overlay_history[-1] = subtitle
+        elif subtitle["original"] or subtitle["translation"]:
+            self._overlay_history.append(subtitle)
+            del self._overlay_history[:-self.OVERLAY_HISTORY_LIMIT]
+        self._latest_subtitle = subtitle
         self._render_overlay()
-        return {"ok": True}
+        return {"ok": True, "history_count": len(self._overlay_history)}
 
     def clear_overlay(self) -> dict[str, Any]:
         self._latest_subtitle = {"original": "", "translation": "", "meta": ""}
+        self._overlay_history.clear()
         self._render_overlay()
         return {"ok": True}
+
+    def _overlay_history_lines(self) -> list[str]:
+        lines: list[str] = []
+        for subtitle in self._overlay_history:
+            text = (subtitle["translation"] or subtitle["original"]).strip()
+            if text:
+                lines.append(" ".join(text.split())[:600])
+        return lines[-self.OVERLAY_HISTORY_LIMIT:]
 
     def resize_overlay(self, width: int, height: int) -> dict[str, Any]:
         if self._native_overlay is None:
@@ -352,7 +377,7 @@ class DesktopBridge:
             return {"ok": False, "locked": True, "error": "窗口已锁定，请先解除锁定。"}
         try:
             safe_width = max(480, min(1800, int(width)))
-            safe_height = max(130, min(700, int(height)))
+            safe_height = max(300, min(700, int(height)))
             self._native_overlay.resize(safe_width, safe_height)
             return {"ok": True, "width": safe_width, "height": safe_height}
         except (TypeError, ValueError, OSError) as exc:
@@ -380,7 +405,10 @@ class DesktopBridge:
         if self._native_overlay is None:
             return
         try:
-            self._native_overlay.update(**self._latest_subtitle)
+            self._native_overlay.update(
+                **self._latest_subtitle,
+                history=self._overlay_history_lines(),
+            )
         except Exception:
             LOGGER.debug("Native overlay is not ready yet", exc_info=True)
 
@@ -595,9 +623,24 @@ def main() -> int:
                 )
                 bridge.set_ui_language("en")
                 bridge.update_overlay({
-                    "original": "Overlay smoke test",
-                    "translation": "迷你字幕测试",
+                    "original": "First rolling subtitle",
+                    "translation": "第一句保留在最上方",
+                    "meta": "Base · CPU · 80 ms",
+                })
+                bridge.update_overlay({
+                    "original": "Second rolling subtitle",
+                    "translation": "第二句随新内容向上滚动",
+                    "meta": "Base · CPU · 90 ms",
+                })
+                bridge.update_overlay({
+                    "original": "Third rolling subtitle",
+                    "translation": "第三句仍然可以继续阅读",
                     "meta": "Base · CPU · 100 ms",
+                })
+                bridge.update_overlay({
+                    "original": "Current subtitle remains highlighted",
+                    "translation": "第四句作为当前译文高亮",
+                    "meta": "Base · CPU · 120 ms",
                 })
                 bridge.set_overlay_transparency(100)
                 result = bridge.show_overlay()
@@ -608,7 +651,7 @@ def main() -> int:
                     return
                 time.sleep(0.35)
                 bridge.set_overlay_locked(False)
-                resize_result = bridge.resize_overlay(760, 210)
+                resize_result = bridge.resize_overlay(760, 300)
                 saved_style = bridge._native_overlay.debug_state()
                 bridge._native_overlay.set_text_style(18, 24, "#66CCFF", "#FFCC66")
                 bridge._native_overlay.show_style_settings()
@@ -645,6 +688,8 @@ def main() -> int:
                     and style_capabilities.get("translation_font_size") == 24
                     and style_capabilities.get("original_color") == "#66CCFF"
                     and style_capabilities.get("translation_color") == "#FFCC66"
+                    and overlay_capabilities.get("history_visible")
+                    and overlay_capabilities.get("history") == ["第一句保留在最上方", "第二句随新内容向上滚动", "第三句仍然可以继续阅读", "第四句作为当前译文高亮"]
                     and not overlay_capabilities.get("style_visible")
                 )
                 if not overlay_ok:
@@ -662,9 +707,24 @@ def main() -> int:
                 LOGGER.info("Desktop smoke test destroy request completed")
             elif visual_overlay_test:
                 bridge.update_overlay({
-                    "original": "The native window should be transparent",
-                    "translation": "白色宿主窗口应该已经完全透明",
-                    "meta": "可视化透明度检查",
+                    "original": "The first sentence moves to the top",
+                    "translation": "第一句移动到最上方，直到第五句到来才消失",
+                    "meta": "滚动字幕检查 1/4",
+                })
+                bridge.update_overlay({
+                    "original": "The second sentence remains readable",
+                    "translation": "第二句保留在队列中，可以继续阅读",
+                    "meta": "滚动字幕检查 2/4",
+                })
+                bridge.update_overlay({
+                    "original": "The third sentence follows naturally",
+                    "translation": "第三句自然向上移动，不会突然清空",
+                    "meta": "滚动字幕检查 3/4",
+                })
+                bridge.update_overlay({
+                    "original": "The newest sentence stays highlighted at the bottom",
+                    "translation": "第四句固定在最下方，并作为当前译文高亮",
+                    "meta": "滚动字幕检查 4/4",
                 })
                 bridge.set_overlay_locked(False)
                 bridge.set_overlay_transparency(100)
