@@ -31,14 +31,14 @@ system_audio = SystemAudioManager()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Pay the one-time Base model load cost while the splash/window is opening,
-    # rather than after the first live chunk has already been recorded. Awaiting
-    # the worker also guarantees no warm-up thread survives application exit.
-    await asyncio.to_thread(engine.warm_up)
+    # Keep the idle desktop light. The model is prepared explicitly when the
+    # user starts a session, so merely opening YiSheng cannot reserve 1+ GB or
+    # contend with a game before interpretation is needed.
     try:
         yield
     finally:
         await asyncio.to_thread(system_audio.stop)
+        await asyncio.to_thread(engine.release)
 
 
 app = FastAPI(title="译声", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
@@ -98,7 +98,26 @@ async def get_cache_status() -> dict:
 
 @app.post("/api/cache/clear")
 async def clear_app_cache() -> dict:
-    return await asyncio.to_thread(clear_cache)
+    memory = await asyncio.to_thread(engine.release)
+    result = await asyncio.to_thread(clear_cache)
+    result["memory_released"] = memory["released"]
+    return result
+
+
+@app.post("/api/engine/prepare")
+async def prepare_engine() -> dict:
+    try:
+        return await asyncio.to_thread(engine.prepare)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logging.exception("Speech model preparation failed")
+        raise HTTPException(status_code=503, detail=f"语音模型准备失败：{exc}") from exc
+
+
+@app.post("/api/engine/release")
+async def release_engine() -> dict:
+    return await asyncio.to_thread(engine.release)
 
 
 @app.get("/api/models/whisper/status")

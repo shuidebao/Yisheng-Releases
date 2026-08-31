@@ -83,6 +83,12 @@ def memory_gb() -> tuple[float, float]:
         return 0.0, 0.0
 
 
+def performance_cpu_threads(logical_processors: int | None = None) -> int:
+    """Keep local inference responsive without competing with a running game."""
+    processors = logical_processors if logical_processors is not None else (os.cpu_count() or 2)
+    return 1 if processors <= 2 else 2
+
+
 def _cpu_name() -> str:
     if platform.system() == "Windows":
         try:
@@ -149,9 +155,7 @@ def detect_hardware() -> HardwareInfo:
 
 
 def recommended_profile(hardware: HardwareInfo) -> dict[str, str | float]:
-    if hardware.cuda_runtime_ready and (hardware.vram_mb or 0) >= 6000:
-        # Short rolling chunks let the UI publish a provisional sentence while
-        # the speaker is still talking. The existing overlap/context merge then
-        # revises that same row instead of waiting for a complete 4+ second clip.
-        return {"model": "base", "device": "cuda", "compute_type": "float16", "chunk_seconds": 1.4}
+    # Automatic mode is deliberately game-friendly. A user can still select
+    # NVIDIA GPU explicitly when recognition speed matters more than preserving
+    # GPU time and VRAM for a game.
     return {"model": "base", "device": "cpu", "compute_type": "int8", "chunk_seconds": 1.8}

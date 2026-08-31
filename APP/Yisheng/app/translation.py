@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import ARGOS_MODEL_ROOT, MODEL_ROOT
+from .config import ARGOS_MODEL_ROOT, MODEL_ROOT, performance_cpu_threads
 
 
 class TranslationUnavailable(RuntimeError):
@@ -67,9 +66,8 @@ class _CTranslate2Model:
             except ImportError as exc:
                 raise TranslationUnavailable("翻译运行库不完整，请重新安装译声。") from exc
 
-            # Four CPU threads provides a good latency/load balance on ordinary
-            # Windows PCs; CT2 internally schedules the vectorized kernels.
-            threads = max(1, min(4, os.cpu_count() or 2))
+            # Leave CPU headroom for games and other foreground applications.
+            threads = performance_cpu_threads()
             translator = ctranslate2.Translator(
                 str(self.model_dir),
                 device="cpu",
@@ -110,9 +108,23 @@ class _CTranslate2Model:
 
     def unload(self) -> None:
         """Release an inactive route so language switching does not grow RAM forever."""
+        unload_model = getattr(self._translator, "unload_model", None)
+        if callable(unload_model):
+            try:
+                unload_model()
+            except Exception:
+                pass
         self._translator = None
         self._source_tokenizer = None
         self._target_tokenizer = None
+
+    @property
+    def loaded(self) -> bool:
+        return any(component is not None for component in (
+            self._translator,
+            self._source_tokenizer,
+            self._target_tokenizer,
+        ))
 
 
 class OfflineTranslator:
@@ -234,3 +246,11 @@ class OfflineTranslator:
         raise TranslationUnavailable(
             "译声不在用户电脑上临时下载翻译模型；内置模型缺失，请重新下载安装包。"
         )
+
+    def unload(self) -> bool:
+        """Release all resident translation routes and report whether any were loaded."""
+        with self._lock:
+            released = any(model.loaded for model in self._models.values())
+            for model in self._models.values():
+                model.unload()
+            return released

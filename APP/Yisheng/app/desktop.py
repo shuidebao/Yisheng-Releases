@@ -30,6 +30,22 @@ QUIT_EVENT_NAME = r"Local\Yisheng_Interpreter_Quit"
 BACKEND_START_TIMEOUT_SECONDS = 120.0
 
 
+def prefer_foreground_apps() -> bool:
+    """Run YiSheng below normal priority so a game keeps scheduler priority."""
+    if os.name != "nt":
+        return False
+    try:
+        kernel32 = ctypes.windll.kernel32
+        get_current_process = kernel32.GetCurrentProcess
+        get_current_process.restype = ctypes.c_void_p
+        set_priority_class = kernel32.SetPriorityClass
+        set_priority_class.argtypes = (ctypes.c_void_p, ctypes.c_uint32)
+        set_priority_class.restype = ctypes.c_int
+        return bool(set_priority_class(get_current_process(), 0x00004000))
+    except (AttributeError, OSError, TypeError):
+        return False
+
+
 def find_free_port(host: str = HOST) -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.bind((host, 0))
@@ -487,6 +503,8 @@ def main() -> int:
             encoding="utf-8",
         )],
     )
+    if prefer_foreground_apps():
+        LOGGER.info("YiSheng process priority set to BelowNormal for game responsiveness")
 
     try:
         import webview

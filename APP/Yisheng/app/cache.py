@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Iterable
 
-from .config import MODEL_ROOT, ROOT, WHISPER_MODEL_ROOT
+from .config import ARGOS_STATE_ROOT, MODEL_ROOT, ROOT, WHISPER_MODEL_ROOT
 from .whisper_models import ALLOWED_MODELS, model_directory, model_ready
 
 
@@ -44,6 +44,7 @@ def _temporary_audio_files() -> Iterable[Path]:
 def _safe_cache_targets() -> list[Path]:
     targets: list[Path] = list(_temporary_audio_files())
     targets.extend((ROOT / "logs").glob("desktop.log.*"))
+    targets.append(ARGOS_STATE_ROOT / "cache")
 
     if WHISPER_MODEL_ROOT.exists():
         targets.extend(WHISPER_MODEL_ROOT.rglob("*.incomplete"))
@@ -58,6 +59,10 @@ def _safe_cache_targets() -> list[Path]:
         targets.append(WHISPER_MODEL_ROOT / f"models--Systran--faster-whisper-{model}")
 
     return targets
+
+
+def _webview_cache_targets() -> list[Path]:
+    return [WEBVIEW_PROFILE / Path(relative) for relative in WEBVIEW_CACHE_PATHS]
 
 
 def _unique_existing(paths: Iterable[Path]) -> list[Path]:
@@ -77,11 +82,16 @@ def _unique_existing(paths: Iterable[Path]) -> list[Path]:
 
 def cache_status() -> dict[str, object]:
     targets = _unique_existing(_safe_cache_targets())
+    webview_targets = _unique_existing(_webview_cache_targets())
     installed = [model for model in sorted(ALLOWED_MODELS) if model_ready(model)]
     model_bytes = sum(_path_size(model_directory(model)) for model in installed)
+    immediate_bytes = sum(_path_size(path) for path in targets)
+    webview_bytes = sum(_path_size(path) for path in webview_targets)
     return {
-        "cache_bytes": sum(_path_size(path) for path in targets),
-        "cache_items": len(targets),
+        "cache_bytes": immediate_bytes + webview_bytes,
+        "cache_items": len(targets) + len(webview_targets),
+        "immediate_cache_bytes": immediate_bytes,
+        "webview_cache_bytes": webview_bytes,
         "model_bytes": model_bytes,
         "installed_models": installed,
         "models_preserved": True,
@@ -92,6 +102,7 @@ def clear_cache() -> dict[str, object]:
     removed_bytes = 0
     removed_items = 0
     skipped_items = 0
+    pending_webview_bytes = sum(_path_size(path) for path in _unique_existing(_webview_cache_targets()))
 
     for path in _unique_existing(_safe_cache_targets()):
         size = _path_size(path)
@@ -121,6 +132,7 @@ def clear_cache() -> dict[str, object]:
         "removed_items": removed_items,
         "skipped_items": skipped_items,
         "restart_required": restart_required,
+        "pending_restart_bytes": pending_webview_bytes if restart_required else 0,
         **status,
     }
 
@@ -132,6 +144,7 @@ def clear_webview_cache_on_start() -> dict[str, int | bool]:
 
     removed_bytes = 0
     removed_items = 0
+    skipped_items = 0
     for relative in WEBVIEW_CACHE_PATHS:
         target = WEBVIEW_PROFILE / Path(relative)
         if not target.exists():
@@ -145,9 +158,16 @@ def clear_webview_cache_on_start() -> dict[str, int | bool]:
             removed_bytes += size
             removed_items += 1
         except OSError:
+            skipped_items += 1
             continue
-    try:
-        WEBVIEW_CLEAR_MARKER.unlink(missing_ok=True)
-    except OSError:
-        pass
-    return {"requested": True, "removed_bytes": removed_bytes, "removed_items": removed_items}
+    if skipped_items == 0:
+        try:
+            WEBVIEW_CLEAR_MARKER.unlink(missing_ok=True)
+        except OSError:
+            skipped_items += 1
+    return {
+        "requested": True,
+        "removed_bytes": removed_bytes,
+        "removed_items": removed_items,
+        "skipped_items": skipped_items,
+    }

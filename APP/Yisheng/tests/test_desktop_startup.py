@@ -26,7 +26,7 @@ class OverlayStub:
 
 
 class DesktopStartupTests(unittest.TestCase):
-    def test_cold_start_budget_allows_slow_first_model_load(self) -> None:
+    def test_startup_budget_allows_slow_first_runtime_initialization(self) -> None:
         default = inspect.signature(LocalBackend.start).parameters["timeout"].default
         self.assertEqual(default, BACKEND_START_TIMEOUT_SECONDS)
         self.assertGreaterEqual(default, 90.0)

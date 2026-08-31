@@ -65,9 +65,11 @@ class ProjectMetadataTests(unittest.TestCase):
         hardware = HardwareInfo("Windows", "CPU", 16.0, 8.0, None, None, False)
         self.assertEqual(recommended_profile(hardware)["chunk_seconds"], 1.8)
 
-    def test_ready_gpu_profile_uses_faster_rolling_chunks(self) -> None:
+    def test_ready_gpu_still_defaults_to_game_friendly_cpu_profile(self) -> None:
         hardware = HardwareInfo("Windows", "CPU", 16.0, 8.0, "GPU", 8192, True)
-        self.assertEqual(recommended_profile(hardware)["chunk_seconds"], 1.4)
+        profile = recommended_profile(hardware)
+        self.assertEqual(profile["device"], "cpu")
+        self.assertEqual(profile["chunk_seconds"], 1.8)
 
 
 if __name__ == "__main__":

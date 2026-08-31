@@ -186,11 +186,11 @@
     <div class="setting-group">
       <label for="deviceSelect"><span data-i18n="computeDevice">计算设备</span></label>
       <select id="deviceSelect">
-        <option value="auto" data-i18n="autoSelect">自动选择</option>
+        <option value="auto" data-i18n="autoSelect">自动（游戏优先）</option>
         <option value="cuda">NVIDIA GPU</option>
         <option value="cpu">CPU</option>
       </select>
-      <p class="field-help" id="deviceHelp" data-i18n="deviceHelp">优先使用 GPU，运行库不可用时自动回退。</p>
+      <p class="field-help" id="deviceHelp" data-i18n="deviceHelp">自动模式使用低占用 CPU，为游戏保留显卡；需要更快识别时可手动选择 GPU。</p>
     </div>
 
     <div class="setting-group">

@@ -7,7 +7,14 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .config import WHISPER_MODEL_ROOT, HardwareInfo, detect_hardware, memory_gb, recommended_profile
+from .config import (
+    WHISPER_MODEL_ROOT,
+    HardwareInfo,
+    detect_hardware,
+    memory_gb,
+    performance_cpu_threads,
+    recommended_profile,
+)
 from .text import clean_transcript, merge_continuation
 from .translation import OfflineTranslator
 from .whisper_models import ALLOWED_MODELS, ensure_whisper_model
@@ -121,9 +128,9 @@ class InterpreterEngine:
         return self.status()
 
     def _choose_device(self) -> None:
-        wants_cuda = self.requested_device == "cuda" or (
-            self.requested_device == "auto" and self.hardware.cuda_runtime_ready
-        )
+        # Automatic mode reserves the GPU for games. CUDA remains available as
+        # an explicit opt-in for users who prefer maximum recognition speed.
+        wants_cuda = self.requested_device == "cuda"
         if wants_cuda:
             self.active_device = "cuda"
             self.compute_type = "float16"
@@ -175,7 +182,7 @@ class InterpreterEngine:
                 str(model_path),
                 device=device,
                 compute_type=compute_type,
-                cpu_threads=6,
+                cpu_threads=performance_cpu_threads(),
                 num_workers=1,
             )
         except Exception as exc:
@@ -220,6 +227,36 @@ class InterpreterEngine:
             # surface the same actionable error when the user starts listening.
             self.last_error = f"语音模型预加载失败：{exc}"
             LOGGER.warning("ASR warm-up failed: %s", exc)
+
+    def prepare(self) -> dict:
+        """Load the selected model only when the user starts interpreting."""
+        with self._model_lock:
+            self.last_error = None
+            self._load_model()
+        return self.status()
+
+    def release(self) -> dict[str, bool]:
+        """Release resident recognition and translation models while idle."""
+        with self._model_lock:
+            recognition_model = self._model
+            recognition_released = recognition_model is not None
+            if recognition_model is not None:
+                runtime_model = getattr(recognition_model, "model", None)
+                unload_model = getattr(runtime_model, "unload_model", None)
+                if callable(unload_model):
+                    try:
+                        unload_model()
+                    except Exception:
+                        LOGGER.debug("Could not explicitly unload ASR model", exc_info=True)
+            self._model = None
+            translation_released = self.translator.unload()
+            gc.collect()
+        return {
+            "ok": True,
+            "recognition_released": recognition_released,
+            "translation_released": translation_released,
+            "released": recognition_released or translation_released,
+        }
 
     def transcribe(
         self,

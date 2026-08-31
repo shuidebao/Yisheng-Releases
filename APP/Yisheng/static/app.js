@@ -22,7 +22,7 @@ const UI_TEXT = {
     tinyOption: "Tiny · 极速 / 首次选择下载约 75 MB", baseOption: "Base · 已内置 / 性能均衡",
     smallOption: "Small · 更准确 / 首次选择下载约 484 MB", mediumOption: "Medium · 高准确度 / 首次选择下载约 1.53 GB",
     baseBundled: "Base 已内置", modelDownloadHelp: "选择其他模型后，点击“应用设置”开始下载",
-    computeDevice: "计算设备", autoSelect: "自动选择", deviceHelp: "优先使用 GPU，运行库不可用时自动回退。",
+    computeDevice: "计算设备", autoSelect: "自动（游戏优先）", deviceHelp: "自动模式使用低占用 CPU，为游戏保留显卡；需要更快识别时可手动选择 GPU。",
     systemDevice: "电脑声音设备", gameVideoOutput: "游戏与视频输出", autoSpeaker: "自动选择当前扬声器",
     systemAudioHelp: "自动捕获 Windows 正在播放的声音，不需要打开“立体声混音”。",
     offlineTranslationModel: "离线互译模型", repair: "修复", cacheManagement: "缓存管理",
@@ -41,16 +41,16 @@ const UI_TEXT = {
     firstDownload: "首次选择将下载约 {size}，下载完成后保存在本地", modelStatusFailed: "模型状态读取失败", modelDownloadFailed: "{model} 模型下载失败。",
     miniDesktopOnly: "迷你悬浮窗仅在桌面版中可用。", miniOpenFailed: "无法打开迷你悬浮窗。", cleanable: "可清理 {size}", none: "暂无",
     downloadedModels: "已下载模型：{models}（{size}，不会删除）", cacheStatusFailed: "缓存状态读取失败", stopBeforeClear: "请先停止同传并等待当前片段处理完成。",
-    clearing: "清理中…", released: "已释放 {size}", cacheKeptRestart: "已下载模型、设置和字幕均已保留；重启后完成网页缓存清理。",
-    cacheKept: "已下载模型、设置和字幕均已保留。", cacheCleared: "缓存清理完成，释放 {size}。已下载模型不会被删除。", clearFailed: "清理失败：{error}",
-    unknown: "未知", noNvidia: "未检测到 NVIDIA 显卡", availableRam: " · 可用 {ram} GB", gpuReady: "GPU 就绪", cpuFallback: "CPU 回退",
-    cudaReady: "CUDA 已就绪，推荐 {model} / GPU。", cudaIncomplete: "检测到显卡，但 CUDA 12 / cuDNN 9 运行库不完整；自动模式使用 CPU。",
+    clearing: "清理中…", released: "已释放 {size}", releasedRestart: "已释放 {size} · 重启再释放 {pending}", cachePartial: "已释放 {size}，{count} 项被占用，可稍后重试", cacheKeptRestart: "常驻模型内存已释放；已下载模型、设置和字幕均保留，重启后完成网页缓存清理。",
+    cacheKept: "常驻模型内存已释放；已下载模型、设置和字幕均已保留。", cacheCleared: "缓存清理完成，释放 {size}。已下载模型不会被删除。", cacheClearedRestart: "已立即释放 {size}，重启后再释放网页缓存 {pending}。已下载模型不会被删除。", clearFailed: "清理失败：{error}",
+    unknown: "未知", noNvidia: "未检测到 NVIDIA 显卡", availableRam: " · 可用 {ram} GB", gpuReady: "GPU 可选", cpuFallback: "低占用 CPU",
+    cudaReady: "CUDA 已就绪；自动模式使用低占用 CPU，为游戏保留显卡。需要更快识别可手动选择 GPU。", cudaIncomplete: "检测到显卡，但 CUDA 12 / cuDNN 9 运行库不完整；自动模式使用低占用 CPU。",
     statusFailed: "无法读取引擎状态：{error}", defaultPrefix: "默认 · ", devicesFound: "已检测到 {count} 个 Windows 输出设备，使用 WASAPI 本地捕获。",
     noAudioDevice: "没有检测到可用的电脑声音设备。", audioComponentFailed: "电脑声音组件不可用：{error}", stillListening: "仍在监听 · 上一片段失败",
     processingFailed: "处理失败", sessionEnded: "本次同传已结束", translationUnavailable: "内置翻译模型不可用，请重新安装译声。",
     translationModelUnavailable: "翻译模型不可用", systemAudioReadFailed: "电脑声音读取失败 ({status})", systemAudioInterrupted: "电脑声音监听已中断",
     micHint: "只听本人说话 · 游戏/视频请选电脑声音", systemHint: "推荐 · 直接捕获游戏、视频和播客声音", bothHint: "同时监听两路声音",
-    microphoneAdvice: "翻译游戏、视频或播客时请改选“电脑声音”；麦克风只适合直接说话。", stopInterpreting: "停止同传", interpreting: "正在同传",
+    microphoneAdvice: "翻译游戏、视频或播客时请改选“电脑声音”；麦克风只适合直接说话。", stopInterpreting: "停止同传", interpreting: "正在同传", preparingEngine: "正在准备本地语音模型…",
     lowLatency: "低延迟同传 · {source}", micPermission: "需要允许麦克风权限才能监听麦克风。", audioStartFailed: "声音启动失败：{error}", finishingLast: "正在完成最后片段",
     exportTitle: "译声 · 同声传译记录", exportTime: "导出时间：{time}", originalLine: "[{index}] 原文（{source} · {language}）", untranslated: "[未翻译]",
     savedTo: "已保存到：{path}", saveFailed: "保存失败。", desktopExportFailed: "桌面导出失败：{error}", stopBeforeModel: "请先停止当前同传，再切换模型。",
@@ -77,7 +77,7 @@ const UI_TEXT = {
     tinyOption: "Tiny · Fastest / first download about 75 MB", baseOption: "Base · Bundled / balanced",
     smallOption: "Small · More accurate / first download about 484 MB", mediumOption: "Medium · High accuracy / first download about 1.53 GB",
     baseBundled: "Base is bundled", modelDownloadHelp: "Choose another model, then click Apply settings to download it",
-    computeDevice: "Compute device", autoSelect: "Automatic", deviceHelp: "Prefer GPU and fall back to CPU if the runtime is unavailable.",
+    computeDevice: "Compute device", autoSelect: "Automatic (game-first)", deviceHelp: "Automatic uses low-impact CPU processing and reserves the GPU for games. Select GPU manually for faster recognition.",
     systemDevice: "Computer audio device", gameVideoOutput: "Game and video output", autoSpeaker: "Automatically use the current speaker",
     systemAudioHelp: "Captures audio currently playing in Windows. Stereo Mix is not required.",
     offlineTranslationModel: "Offline translation models", repair: "Repair", cacheManagement: "Cache management",
@@ -96,16 +96,16 @@ const UI_TEXT = {
     firstDownload: "The first selection downloads about {size} and keeps it locally", modelStatusFailed: "Could not read model status", modelDownloadFailed: "{model} model download failed.",
     miniDesktopOnly: "Mini overlay is only available in the desktop app.", miniOpenFailed: "Could not open the mini overlay.", cleanable: "Can clear {size}", none: "None",
     downloadedModels: "Downloaded models: {models} ({size}, kept)", cacheStatusFailed: "Could not read cache status", stopBeforeClear: "Stop interpreting and wait for the current segment before clearing cache.",
-    clearing: "Clearing…", released: "Released {size}", cacheKeptRestart: "Downloaded models, settings, and subtitles were kept. Restart to finish clearing the web cache.",
-    cacheKept: "Downloaded models, settings, and subtitles were kept.", cacheCleared: "Cache cleared. Released {size}; downloaded models were not deleted.", clearFailed: "Clear failed: {error}",
-    unknown: "Unknown", noNvidia: "No NVIDIA GPU detected", availableRam: " · {ram} GB available", gpuReady: "GPU ready", cpuFallback: "CPU fallback",
-    cudaReady: "CUDA is ready. Recommended: {model} / GPU.", cudaIncomplete: "An NVIDIA GPU was detected, but CUDA 12 / cuDNN 9 is incomplete. Automatic mode will use CPU.",
+    clearing: "Clearing…", released: "Released {size}", releasedRestart: "Released {size} · restart frees {pending} more", cachePartial: "Released {size}; {count} item(s) are busy and can be retried later", cacheKeptRestart: "Resident model memory was released. Downloaded models, settings, and subtitles were kept; restart to finish clearing the web cache.",
+    cacheKept: "Resident model memory was released. Downloaded models, settings, and subtitles were kept.", cacheCleared: "Cache cleared. Released {size}; downloaded models were not deleted.", cacheClearedRestart: "Released {size} now; restarting will free another {pending} of web cache. Downloaded models were not deleted.", clearFailed: "Clear failed: {error}",
+    unknown: "Unknown", noNvidia: "No NVIDIA GPU detected", availableRam: " · {ram} GB available", gpuReady: "GPU optional", cpuFallback: "Low-impact CPU",
+    cudaReady: "CUDA is ready. Automatic mode uses low-impact CPU processing to reserve the GPU for games; select GPU manually for faster recognition.", cudaIncomplete: "An NVIDIA GPU was detected, but CUDA 12 / cuDNN 9 is incomplete. Automatic mode uses low-impact CPU processing.",
     statusFailed: "Could not read engine status: {error}", defaultPrefix: "Default · ", devicesFound: "Found {count} Windows output device(s). Capturing locally with WASAPI.",
     noAudioDevice: "No computer audio device was found.", audioComponentFailed: "Computer audio is unavailable: {error}", stillListening: "Still listening · Previous segment failed",
     processingFailed: "Processing failed", sessionEnded: "Interpretation ended", translationUnavailable: "The bundled translation model is unavailable. Reinstall YiSheng.",
     translationModelUnavailable: "Translation model unavailable", systemAudioReadFailed: "Computer audio read failed ({status})", systemAudioInterrupted: "Computer audio capture stopped",
     micHint: "Only listens to you · Choose computer audio for games or videos", systemHint: "Recommended · Captures games, videos, and podcasts directly", bothHint: "Listen to both audio sources",
-    microphoneAdvice: "For games, videos, or podcasts, choose Computer audio. Microphone is intended for direct speech.", stopInterpreting: "Stop interpreting", interpreting: "Interpreting",
+    microphoneAdvice: "For games, videos, or podcasts, choose Computer audio. Microphone is intended for direct speech.", stopInterpreting: "Stop interpreting", interpreting: "Interpreting", preparingEngine: "Preparing the local speech model…",
     lowLatency: "Low-latency interpretation · {source}", micPermission: "Microphone permission is required.", audioStartFailed: "Could not start audio: {error}", finishingLast: "Finishing the last segment",
     exportTitle: "YiSheng · Live interpretation transcript", exportTime: "Exported: {time}", originalLine: "[{index}] Original ({source} · {language})", untranslated: "[Not translated]",
     savedTo: "Saved to: {path}", saveFailed: "Could not save the file.", desktopExportFailed: "Desktop export failed: {error}", stopBeforeModel: "Stop the current session before switching models.",
@@ -186,6 +186,7 @@ const elements = {
 const state = {
   uiLanguage: INITIAL_UI_LANGUAGE,
   recording: false,
+  starting: false,
   stream: null,
   audioContext: null,
   sourceNode: null,
@@ -252,6 +253,8 @@ function applyUiLanguage() {
     elements.recordLabel.textContent = tr("interpreting");
     elements.recordButton.setAttribute("aria-label", tr("stopInterpreting"));
     setSessionState(tf("lowLatency", { source: audioSourceNames[state.captureMode] }), true);
+  } else if (state.starting) {
+    elements.recordLabel.textContent = tr("preparingEngine");
   } else {
     elements.recordLabel.textContent = tr("startInterpreting");
     elements.recordButton.setAttribute("aria-label", tr("startInterpreting"));
@@ -476,7 +479,7 @@ async function loadCacheStatus() {
 }
 
 async function clearAppCache() {
-  if (state.recording || state.processing) {
+  if (state.recording || state.processing || state.starting) {
     toast(tr("stopBeforeClear"), "error");
     return;
   }
@@ -492,11 +495,21 @@ async function clearAppCache() {
       await Promise.all(keys.map((key) => window.caches.delete(key)));
     }
     const result = await api("/api/cache/clear", { method: "POST" });
-    elements.cacheStatus.textContent = tf("released", { size: formatBytes(result.removed_bytes) });
+    const released = formatBytes(result.removed_bytes);
+    const pending = formatBytes(result.pending_restart_bytes || 0);
+    elements.cacheStatus.textContent = result.skipped_items
+      ? tf("cachePartial", { size: released, count: result.skipped_items })
+      : result.pending_restart_bytes
+        ? tf("releasedRestart", { size: released, pending })
+        : tf("released", { size: released });
     elements.cacheDetail.textContent = result.restart_required
       ? tr("cacheKeptRestart")
       : tr("cacheKept");
-    toast(tf("cacheCleared", { size: formatBytes(result.removed_bytes) }), "info", 6500);
+    toast(result.skipped_items
+      ? tf("cachePartial", { size: released, count: result.skipped_items })
+      : result.pending_restart_bytes
+        ? tf("cacheClearedRestart", { size: released, pending })
+        : tf("cacheCleared", { size: released }), result.skipped_items ? "error" : "info", 6500);
   } catch (error) {
     toast(tf("clearFailed", { error: error.message }), "error", 6500);
     await loadCacheStatus();
@@ -783,7 +796,10 @@ async function processQueue() {
     state.processing = false;
     elements.thinkingRow.hidden = state.queue.length === 0;
     if (state.queue.length) processQueue();
-    else if (!state.recording) setSessionState(tr("sessionEnded"), false);
+    else if (!state.recording) {
+      setSessionState(tr("sessionEnded"), false);
+      await releaseEngineIfIdle();
+    }
   }
 }
 
@@ -953,6 +969,11 @@ function updateSourceHint() {
 }
 
 async function startRecording() {
+  if (state.starting || state.recording) return;
+  state.starting = true;
+  elements.recordButton.disabled = true;
+  elements.recordLabel.textContent = tr("preparingEngine");
+  setSessionState(tr("preparingEngine"), true);
   state.captureLanguage = elements.languageSelect.value;
   state.captureTarget = elements.targetLanguageSelect.value;
   state.captureMode = elements.audioSourceSelect.value;
@@ -964,10 +985,11 @@ async function startRecording() {
   state.captureOverlapSeconds = japaneseCapture
     ? Math.max(state.overlapSeconds, .8)
     : englishCapture ? Math.max(state.overlapSeconds, .7) : state.overlapSeconds;
-  state.recording = true;
   state.buffers = [];
   state.bufferedFrames = 0;
   try {
+    await api("/api/engine/prepare", { method: "POST" });
+    state.recording = true;
     if (state.captureMode === "microphone") {
       toast(tr("microphoneAdvice"), "info", 7000);
     }
@@ -991,8 +1013,17 @@ async function startRecording() {
   } catch (error) {
     state.recording = false;
     await stopCaptureResources();
+    await releaseEngineIfIdle();
     const permissionDenied = error.name === "NotAllowedError";
     toast(permissionDenied ? tr("micPermission") : tf("audioStartFailed", { error: error.message }), "error", 6500);
+  } finally {
+    state.starting = false;
+    elements.recordButton.disabled = false;
+    if (!state.recording) {
+      elements.recordLabel.textContent = tr("startInterpreting");
+      elements.recordButton.setAttribute("aria-label", tr("startInterpreting"));
+      updateSourceHint();
+    }
   }
 }
 
@@ -1012,6 +1043,16 @@ async function stopRecording() {
   elements.systemDeviceSelect.disabled = state.systemDevices.length === 0;
   updateSourceHint();
   setSessionState(state.processing || state.queue.length ? tr("finishingLast") : tr("sessionEnded"), false);
+  if (!state.processing && !state.queue.length) await releaseEngineIfIdle();
+}
+
+async function releaseEngineIfIdle() {
+  if (state.recording || state.processing || state.queue.length) return;
+  try {
+    await api("/api/engine/release", { method: "POST" });
+  } catch {
+    // The process still releases all models during normal application exit.
+  }
 }
 
 function clearTranscript() {
