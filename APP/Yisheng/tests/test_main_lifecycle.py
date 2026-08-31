@@ -3,9 +3,15 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from app import main
+try:
+    import fastapi  # noqa: F401
+except ModuleNotFoundError:
+    main = None
+else:
+    from app import main
 
 
+@unittest.skipIf(main is None, "FastAPI is only included in the bundled desktop runtime")
 class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_startup_stays_lazy_and_shutdown_releases_models(self) -> None:
         with (
