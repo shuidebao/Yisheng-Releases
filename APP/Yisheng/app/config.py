@@ -158,4 +158,5 @@ def recommended_profile(hardware: HardwareInfo) -> dict[str, str | float]:
     # Automatic mode is deliberately game-friendly. A user can still select
     # NVIDIA GPU explicitly when recognition speed matters more than preserving
     # GPU time and VRAM for a game.
-    return {"model": "base", "device": "cpu", "compute_type": "int8", "chunk_seconds": 1.8}
+    # A maximum, not a fixed wait: pauses finish speech much earlier.
+    return {"model": "base", "device": "cpu", "compute_type": "int8", "chunk_seconds": 8.0}

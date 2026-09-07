@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import ast
 import sys
 import types
 import unittest
@@ -14,7 +15,7 @@ try:
 except ModuleNotFoundError:
     sys.modules["uvicorn"] = types.ModuleType("uvicorn")
 
-from app.desktop import BACKEND_START_TIMEOUT_SECONDS, DesktopBridge, LocalBackend, wait_for_health
+from app.desktop import BACKEND_START_TIMEOUT_SECONDS, DesktopBridge, LocalBackend, wait_for_health, main
 
 
 class OverlayStub:
@@ -26,6 +27,14 @@ class OverlayStub:
 
 
 class DesktopStartupTests(unittest.TestCase):
+    def test_desktop_does_not_repeat_pywebviews_global_exit(self) -> None:
+        tree = ast.parse(inspect.getsource(main))
+        repeated_exits = [node for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "Exit" and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "Application"]
+        self.assertEqual(repeated_exits, [])
+
     def test_startup_budget_allows_slow_first_runtime_initialization(self) -> None:
         default = inspect.signature(LocalBackend.start).parameters["timeout"].default
         self.assertEqual(default, BACKEND_START_TIMEOUT_SECONDS)

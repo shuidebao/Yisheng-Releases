@@ -69,7 +69,7 @@ class EngineConfig(BaseModel):
 
 class SystemAudioConfig(BaseModel):
     device_index: int | None = None
-    chunk_seconds: float = 1.8
+    chunk_seconds: float = 8.0
 
 
 @app.get("/api/health")
@@ -201,6 +201,10 @@ async def system_audio_chunk(timeout: float = Query(5.0, ge=0.05, le=10.0)) -> R
         headers={
             "X-Audio-Duration": f"{chunk.duration:.3f}",
             "X-Audio-Level": f"{chunk.level:.3f}",
+            "X-Audio-Sequence": str(chunk.sequence),
+            "X-Audio-Continuation": "1" if chunk.continuation else "0",
+            "X-Audio-Started-At": f"{chunk.started_at:.3f}",
+            "X-Audio-Ended-At": f"{chunk.ended_at:.3f}",
             "Cache-Control": "no-store",
         },
     )

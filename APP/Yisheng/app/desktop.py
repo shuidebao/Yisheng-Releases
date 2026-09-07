@@ -571,6 +571,7 @@ def main() -> int:
                         "about: Boolean(document.getElementById('aboutVersion') && document.getElementById('officialRepository')),",
                         "styles: Array.from(document.styleSheets).some(s => (s.href || '').includes('styles.css')),",
                         "appReady: document.documentElement.dataset.appReady === '1'",
+                        ",audioSession: Boolean(window.YishengAudioSession && window.YishengAudioSession.recognitionPlan)",
                         "})",
                     ])
                     capabilities = window.evaluate_js(capability_script)
@@ -585,6 +586,7 @@ def main() -> int:
                         and capabilities.get("about")
                         and capabilities.get("styles")
                         and capabilities.get("appReady")
+                        and capabilities.get("audioSession")
                     )
                     if startup_state["interactive"]:
                         break
@@ -616,13 +618,10 @@ def main() -> int:
                     if bridge._native_overlay is not None:
                         bridge._native_overlay.close()
 
-                def finish_desktop_close() -> None:
-                    from System.Windows.Forms import Application
-
-                    Application.Exit()
-
                 window.events.closing += close_native_overlay
-                window.events.closed += finish_desktop_close
+                # pywebview already calls Application.Exit on its UI thread.
+                # Calling it again from the asynchronous "closed" event races
+                # the two WinForms loops and can deadlock both shutdown calls.
                 LOGGER.info("Windows native desktop lyric overlay ready")
             except Exception as exc:
                 startup_state["error"] = f"Windows 桌面歌词窗口初始化失败：{exc}"

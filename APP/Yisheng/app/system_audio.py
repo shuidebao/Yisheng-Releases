@@ -9,6 +9,8 @@ import time
 import wave
 from dataclasses import asdict, dataclass
 
+from .speech_chunker import SAMPLE_RATE, SpeechChunker
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +36,10 @@ class AudioChunk:
     wav: bytes
     duration: float
     level: float
+    sequence: int = 0
+    continuation: bool = False
+    started_at: float = 0.0
+    ended_at: float = 0.0
 
 
 class SystemAudioManager:
@@ -43,10 +49,12 @@ class SystemAudioManager:
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._chunks: queue.Queue[AudioChunk] = queue.Queue(maxsize=4)
+        self._chunks: queue.Queue[AudioChunk] = queue.Queue(maxsize=2)
         self._device: LoopbackDevice | None = None
-        self._chunk_seconds = 1.8
-        self._overlap_seconds = 0.5
+        self._chunk_seconds = 8.0
+        self._overlap_seconds = 0.6
+        self._sequence = 0
+        self._dropped_chunks = 0
         self._level = 0.0
         self._error: str | None = None
 
@@ -98,14 +106,17 @@ class SystemAudioManager:
                 "chunk_seconds": self._chunk_seconds,
                 "overlap_seconds": self._overlap_seconds,
                 "queued_chunks": self._chunks.qsize(),
+                "dropped_chunks": self._dropped_chunks,
                 "level": round(self._level, 3),
                 "error": self._error,
             }
 
-    def start(self, device_index: int | None = None, chunk_seconds: float = 1.8) -> dict:
+    def start(self, device_index: int | None = None, chunk_seconds: float = 8.0) -> dict:
         with self._lock:
             if self.running:
                 return self.status()
+            if self._thread and self._thread.is_alive():
+                raise SystemAudioError("电脑声音仍在停止，请稍后重试。")
             devices = self.devices()
             if not devices:
                 raise SystemAudioError("没有检测到可用的 Windows 电脑声音设备。")
@@ -115,7 +126,9 @@ class SystemAudioManager:
 
             self._drain_chunks()
             self._device = selected
-            self._chunk_seconds = min(8.0, max(1.2, float(chunk_seconds)))
+            self._chunk_seconds = min(8.0, max(3.0, float(chunk_seconds)))
+            self._sequence = 0
+            self._dropped_chunks = 0
             self._level = 0.0
             self._error = None
             self._stop.clear()
@@ -138,7 +151,8 @@ class SystemAudioManager:
         if thread and thread.is_alive() and thread is not threading.current_thread():
             thread.join(timeout=timeout)
         with self._lock:
-            self._thread = None
+            if not thread or not thread.is_alive():
+                self._thread = None
             self._level = 0.0
         return self.status()
 
@@ -160,6 +174,22 @@ class SystemAudioManager:
         audio = pyaudio.PyAudio()
         stream = None
         frames_per_buffer = 1024
+        chunker = SpeechChunker(self._chunk_seconds, self._overlap_seconds)
+        resample_state = None
+
+        def emit(chunks):
+            for chunk in chunks:
+                self._sequence += 1
+                self._enqueue(AudioChunk(
+                    wav=self._encode_wav([chunk.pcm], 1, SAMPLE_RATE),
+                    duration=len(chunk.pcm) / (2 * SAMPLE_RATE),
+                    level=min(1.0, audioop.rms(chunk.pcm, 2) / 6000.0),
+                    sequence=self._sequence,
+                    continuation=chunk.continuation,
+                    started_at=chunk.started_at,
+                    ended_at=chunk.ended_at,
+                ))
+
         try:
             stream = audio.open(
                 format=pyaudio.paInt16,
@@ -169,40 +199,18 @@ class SystemAudioManager:
                 input_device_index=device.index,
                 frames_per_buffer=frames_per_buffer,
             )
-            target_frames = int(device.sample_rate * self._chunk_seconds)
-            frames: list[bytes] = []
-            frame_count = 0
-            peak_rms = 0
-
             while not self._stop.is_set():
                 data = stream.read(frames_per_buffer, exception_on_overflow=False)
-                frames.append(data)
-                current_frames = len(data) // (2 * device.channels)
-                frame_count += current_frames
                 rms = audioop.rms(data, 2)
-                peak_rms = max(peak_rms, rms)
                 self._level = min(1.0, rms / 6000.0)
-
-                if frame_count >= target_frames:
-                    raw_frames = b"".join(frames)
-                    # Ignore digital silence and low-level loopback noise. Sending
-                    # near-silence to Whisper is a major source of repeated-word
-                    # hallucinations during pauses in podcasts and videos.
-                    if peak_rms >= 48:
-                        self._enqueue(
-                            AudioChunk(
-                                wav=self._encode_wav([raw_frames], device.channels, device.sample_rate),
-                                duration=frame_count / device.sample_rate,
-                                level=min(1.0, peak_rms / 6000.0),
-                            )
-                        )
-                    # Retain a short tail so words crossing a fixed chunk
-                    # boundary are present in the next recognition request.
-                    overlap_frames = min(frame_count, int(device.sample_rate * self._overlap_seconds))
-                    overlap_bytes = overlap_frames * 2 * device.channels
-                    frames = [raw_frames[-overlap_bytes:]] if overlap_bytes else []
-                    frame_count = overlap_frames
-                    peak_rms = 0
+                if device.channels == 2:
+                    data = audioop.tomono(data, 2, .5, .5)
+                data, resample_state = audioop.ratecv(
+                    data, 2, 1, device.sample_rate, SAMPLE_RATE, resample_state,
+                )
+                emit(chunker.feed(data))
+            # Flush the last spoken words before the frontend drains the queue.
+            emit(chunker.finish())
         except Exception as exc:
             self._error = f"电脑声音捕获失败：{exc}"
             LOGGER.exception("WASAPI loopback capture failed")
@@ -222,6 +230,7 @@ class SystemAudioManager:
         except queue.Full:
             try:
                 self._chunks.get_nowait()
+                self._dropped_chunks += 1
             except queue.Empty:
                 pass
             self._chunks.put_nowait(chunk)

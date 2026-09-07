@@ -1,4 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
+const { enqueueLatest, recognitionPlan, MicrophoneSegmenter } = window.YishengAudioSession;
 
 const INITIAL_UI_LANGUAGE = localStorage.getItem("yisheng-ui-language") === "en" ? "en" : "zh";
 const UI_TEXT = {
@@ -18,7 +19,7 @@ const UI_TEXT = {
     updateSafe: "更新包通过 HTTPS 下载并进行 SHA-256 完整性校验。", localOptimization: "本机优化",
     runtimeSettings: "运行设置", closeSettings: "关闭设置", detectingHardware: "正在检测硬件…",
     pleaseWait: "请稍候", detecting: "检测中", interfaceLanguage: "界面语言", languageHint: "也可点击顶部 🌐 切换",
-    recognitionModel: "识别模型", modelTradeoff: "越大越准确，也越慢",
+    recognitionModel: "识别模型", modelTradeoff: "Base 低占用；Small 更准但更吃 CPU，不能修正翻译模型的错译",
     tinyOption: "Tiny · 极速 / 首次选择下载约 75 MB", baseOption: "Base · 已内置 / 性能均衡",
     smallOption: "Small · 更准确 / 首次选择下载约 484 MB", mediumOption: "Medium · 高准确度 / 首次选择下载约 1.53 GB",
     baseBundled: "Base 已内置", modelDownloadHelp: "选择其他模型后，点击“应用设置”开始下载",
@@ -49,9 +50,10 @@ const UI_TEXT = {
     noAudioDevice: "没有检测到可用的电脑声音设备。", audioComponentFailed: "电脑声音组件不可用：{error}", stillListening: "仍在监听 · 上一片段失败",
     processingFailed: "处理失败", sessionEnded: "本次同传已结束", translationUnavailable: "内置翻译模型不可用，请重新安装译声。",
     translationModelUnavailable: "翻译模型不可用", systemAudioReadFailed: "电脑声音读取失败 ({status})", systemAudioInterrupted: "电脑声音监听已中断",
-    micHint: "只听本人说话 · 游戏/视频请选电脑声音", systemHint: "推荐 · 直接捕获游戏、视频和播客声音", bothHint: "同时监听两路声音",
+    micHint: "只听本人说话 · 游戏/视频请选电脑声音", systemHint: "按停顿成句 · 已知游戏语言时请明确选择原语言", bothHint: "同时监听两路声音 · 计算量更大",
     microphoneAdvice: "翻译游戏、视频或播客时请改选“电脑声音”；麦克风只适合直接说话。", stopInterpreting: "停止同传", interpreting: "正在同传", preparingEngine: "正在准备本地语音模型…",
-    lowLatency: "低延迟同传 · {source}", micPermission: "需要允许麦克风权限才能监听麦克风。", audioStartFailed: "声音启动失败：{error}", finishingLast: "正在完成最后片段",
+    lowLatency: "按停顿成句 · {source}", micPermission: "需要允许麦克风权限才能监听麦克风。", audioStartFailed: "声音启动失败：{error}", finishingLast: "正在完成最后片段",
+    audioBehind: "当前算力跟不上，已跳过积压音频并转到最新内容。建议使用 Base 和单一音源，或降低游戏负载。",
     exportTitle: "译声 · 同声传译记录", exportTime: "导出时间：{time}", originalLine: "[{index}] 原文（{source} · {language}）", untranslated: "[未翻译]",
     savedTo: "已保存到：{path}", saveFailed: "保存失败。", desktopExportFailed: "桌面导出失败：{error}", stopBeforeModel: "请先停止当前同传，再切换模型。",
     checkingModel: "检查模型中…", settingsApplied: "运行设置已应用。模型会在下次识别时加载。", checking: "检查中…", checkingLocalModel: "正在检查本地模型",
@@ -73,7 +75,7 @@ const UI_TEXT = {
     updateSafe: "The update is downloaded over HTTPS and verified with SHA-256.", localOptimization: "LOCAL OPTIMIZATION",
     runtimeSettings: "Runtime settings", closeSettings: "Close settings", detectingHardware: "Detecting hardware…",
     pleaseWait: "Please wait", detecting: "Detecting", interfaceLanguage: "Interface language", languageHint: "You can also use 🌐 at the top",
-    recognitionModel: "Recognition model", modelTradeoff: "Larger is more accurate, but slower",
+    recognitionModel: "Recognition model", modelTradeoff: "Base uses less CPU; Small may improve recognition, not translation errors",
     tinyOption: "Tiny · Fastest / first download about 75 MB", baseOption: "Base · Bundled / balanced",
     smallOption: "Small · More accurate / first download about 484 MB", mediumOption: "Medium · High accuracy / first download about 1.53 GB",
     baseBundled: "Base is bundled", modelDownloadHelp: "Choose another model, then click Apply settings to download it",
@@ -104,9 +106,10 @@ const UI_TEXT = {
     noAudioDevice: "No computer audio device was found.", audioComponentFailed: "Computer audio is unavailable: {error}", stillListening: "Still listening · Previous segment failed",
     processingFailed: "Processing failed", sessionEnded: "Interpretation ended", translationUnavailable: "The bundled translation model is unavailable. Reinstall YiSheng.",
     translationModelUnavailable: "Translation model unavailable", systemAudioReadFailed: "Computer audio read failed ({status})", systemAudioInterrupted: "Computer audio capture stopped",
-    micHint: "Only listens to you · Choose computer audio for games or videos", systemHint: "Recommended · Captures games, videos, and podcasts directly", bothHint: "Listen to both audio sources",
+    micHint: "Only listens to you · Choose computer audio for games or videos", systemHint: "Pause-delimited sentences · Select the game's language when known", bothHint: "Both audio sources · More processing required",
     microphoneAdvice: "For games, videos, or podcasts, choose Computer audio. Microphone is intended for direct speech.", stopInterpreting: "Stop interpreting", interpreting: "Interpreting", preparingEngine: "Preparing the local speech model…",
-    lowLatency: "Low-latency interpretation · {source}", micPermission: "Microphone permission is required.", audioStartFailed: "Could not start audio: {error}", finishingLast: "Finishing the last segment",
+    lowLatency: "Pause-delimited interpretation · {source}", micPermission: "Microphone permission is required.", audioStartFailed: "Could not start audio: {error}", finishingLast: "Finishing the last segment",
+    audioBehind: "Processing cannot keep up. Skipped queued audio to catch up. Try Base with one audio source, or reduce game load.",
     exportTitle: "YiSheng · Live interpretation transcript", exportTime: "Exported: {time}", originalLine: "[{index}] Original ({source} · {language})", untranslated: "[Not translated]",
     savedTo: "Saved to: {path}", saveFailed: "Could not save the file.", desktopExportFailed: "Desktop export failed: {error}", stopBeforeModel: "Stop the current session before switching models.",
     checkingModel: "Checking model…", settingsApplied: "Settings applied. The model will load on the next recognition request.", checking: "Checking…", checkingLocalModel: "Checking bundled models",
@@ -187,6 +190,13 @@ const state = {
   uiLanguage: INITIAL_UI_LANGUAGE,
   recording: false,
   starting: false,
+  stopping: false,
+  releasePromise: null,
+  sessionId: 0,
+  microphoneSegmenter: null,
+  lastBacklogNotice: 0,
+  lastSystemSequence: 0,
+  systemPollTask: null,
   stream: null,
   audioContext: null,
   sourceNode: null,
@@ -195,10 +205,10 @@ const state = {
   buffers: [],
   bufferedFrames: 0,
   sampleRate: 48000,
-  chunkSeconds: 1.8,
+  chunkSeconds: 8.0,
   overlapSeconds: 0.5,
-  captureChunkSeconds: 1.8,
-  captureOverlapSeconds: 0.5,
+  captureChunkSeconds: 8.0,
+  captureOverlapSeconds: 0.6,
   queue: [],
   processing: false,
   segments: [],
@@ -479,7 +489,7 @@ async function loadCacheStatus() {
 }
 
 async function clearAppCache() {
-  if (state.recording || state.processing || state.starting) {
+  if (state.recording || state.processing || state.starting || state.stopping || state.queue.length) {
     toast(tr("stopBeforeClear"), "error");
     return;
   }
@@ -541,15 +551,8 @@ function refreshTranslationState() {
 }
 
 function realtimeChunkSeconds(engine, recommended) {
-  const model = engine?.model || "base";
-  const gpu = engine?.active_device === "cuda";
-  // Larger models need a little more audio per request on ordinary CPUs, or
-  // inference can fall behind real time. Base remains deliberately aggressive
-  // because it is the bundled/default model used by most people.
-  const cpuSeconds = { tiny: 1.4, base: 1.8, small: 2.4, medium: 3.2 };
-  const gpuSeconds = { tiny: 1.2, base: 1.4, small: 1.7, medium: 2.2 };
-  const selected = (gpu ? gpuSeconds : cpuSeconds)[model];
-  return Number(selected || recommended?.chunk_seconds || 1.8);
+  // This is only the uninterrupted-speech ceiling; a 600 ms pause emits early.
+  return Math.min(8, Math.max(3, Number(recommended?.chunk_seconds) || 8));
 }
 
 async function loadStatus() {
@@ -649,10 +652,8 @@ function updateLevelMeter(level) {
 
 function ingestSamples(samples) {
   if (!state.recording) return;
-  state.buffers.push(samples);
-  state.bufferedFrames += samples.length;
   updateLevel(samples);
-  if (state.bufferedFrames >= state.sampleRate * state.captureChunkSeconds) flushAudio(false);
+  for (const chunk of state.microphoneSegmenter.push(samples)) enqueueMicrophoneChunk(chunk);
 }
 
 function concatenate(buffers, totalLength) {
@@ -709,21 +710,27 @@ function encodeWav(samples, sampleRate = 16000) {
 }
 
 function flushAudio(finalChunk) {
-  if (state.bufferedFrames < state.sampleRate * (finalChunk ? .45 : 1)) return;
-  const combined = concatenate(state.buffers, state.bufferedFrames);
-  const duration = combined.length / state.sampleRate;
-  const resampled = downsample(combined, state.sampleRate);
-  state.queue.push({ blob: encodeWav(resampled), duration, language: state.captureLanguage, audioSource: "microphone" });
+  if (!finalChunk) return;
+  const chunk = state.microphoneSegmenter?.finish();
+  if (chunk) enqueueMicrophoneChunk(chunk);
+}
 
-  if (finalChunk) {
-    state.buffers = [];
-    state.bufferedFrames = 0;
-  } else {
-    const overlapFrames = Math.min(combined.length, Math.floor(state.sampleRate * state.captureOverlapSeconds));
-    const overlap = combined.slice(combined.length - overlapFrames);
-    state.buffers = [overlap];
-    state.bufferedFrames = overlap.length;
-  }
+function enqueueMicrophoneChunk(chunk) {
+  const { samples, ...metadata } = chunk;
+  enqueueAudio({ ...metadata, blob: encodeWav(downsample(samples, state.sampleRate)), audioSource: "microphone" });
+}
+
+function warnAudioBehind() {
+  if (Date.now() - state.lastBacklogNotice < 15000) return;
+  state.lastBacklogNotice = Date.now();
+  toast(tr("audioBehind"), "error", 8000);
+}
+
+function enqueueAudio(chunk) {
+  const dropped = enqueueLatest(state.queue, {
+    ...chunk, sessionId: state.sessionId, language: state.captureLanguage, target: state.captureTarget,
+  });
+  if (dropped) warnAudioBehind();
   processQueue();
 }
 
@@ -759,34 +766,17 @@ async function processQueue() {
   const source = chunk.language;
   try {
     const previous = state.segments.at(-1);
-    const sameStream = previous?.audio_source === (chunk.audioSource || "microphone");
-    const confidentAutoLanguage = source === "auto"
-      && ["zh", "ja", "en"].includes(previous?.language)
-      && Number(previous?.language_probability || 0) >= .7
-      && (Date.now() - Number(previous?._receivedAt || 0)) < 4200;
-    const requestLanguage = confidentAutoLanguage ? previous.language : source;
-    const sameLanguage = requestLanguage !== "auto" && previous?.language === requestLanguage;
-    const sameTarget = previous?.target_language === state.captureTarget;
-    // Short Whisper windows sometimes add a full stop even while somebody is
-    // still speaking. Treat nearby chunks from the same stream as one rolling
-    // utterance so the existing row and its translation can be revised with
-    // the newly heard words. A long pause or 180 characters starts a new row.
-    const recent = previous && (Date.now() - Number(previous._receivedAt || 0)) < 4200;
-    const context = sameStream && sameTarget && sameLanguage && recent && previous.original.length <= 180
-      ? previous.original
-      : "";
-    const result = await api(`/api/transcribe?language=${encodeURIComponent(requestLanguage)}&target=${encodeURIComponent(state.captureTarget)}&duration=${chunk.duration.toFixed(2)}&context=${encodeURIComponent(context)}`, {
+    const { language: requestLanguage, context } = recognitionPlan(previous, chunk);
+    const result = await api(`/api/transcribe?language=${encodeURIComponent(requestLanguage)}&target=${encodeURIComponent(chunk.target)}&duration=${chunk.duration.toFixed(2)}&context=${encodeURIComponent(context)}`, {
       method: "POST",
       headers: { "Content-Type": "audio/wav" },
       body: chunk.blob,
     });
     result.audio_source = chunk.audioSource || "microphone";
     result._receivedAt = Date.now();
-    if (source === "auto" && ["ja", "en"].includes(result.language) && result.language_probability >= .7) {
-      const autoJapanese = result.language === "ja";
-      state.captureChunkSeconds = Math.max(state.chunkSeconds, autoJapanese ? 3.2 : 2.8);
-      state.captureOverlapSeconds = Math.max(state.overlapSeconds, autoJapanese ? .8 : .7);
-    }
+    result._sessionId = chunk.sessionId;
+    result._sequence = chunk.sequence;
+    result._endedAt = chunk.endedAt;
     if (result.original) appendSegment(result);
     if (result.warning) toast(result.warning, result.translation_ready ? "info" : "error", 6500);
   } catch (error) {
@@ -796,7 +786,7 @@ async function processQueue() {
     state.processing = false;
     elements.thinkingRow.hidden = state.queue.length === 0;
     if (state.queue.length) processQueue();
-    else if (!state.recording) {
+    else if (!state.recording && !state.stopping) {
       setSessionState(tr("sessionEnded"), false);
       await releaseEngineIfIdle();
     }
@@ -807,16 +797,8 @@ function appendSegment(result) {
   const previous = state.segments.at(-1);
   const sameSource = previous?.audio_source === result.audio_source;
   const continuing = Boolean(result.continued && sameSource && previous?._element);
-  if (!continuing) {
-    const cjk = ["ja", "zh", "ko"].includes(result.language);
-    result.original = cjk
-      ? trimCharacterOverlap(sameSource ? previous.original : "", result.original)
-      : trimWordOverlap(sameSource ? previous.original : "", result.original);
-    const cjkTarget = ["ja", "zh"].includes(result.target_language);
-    result.translation = cjkTarget
-      ? trimCharacterOverlap(sameSource && previous?.target_language === result.target_language ? previous.translation : "", result.translation)
-      : trimWordOverlap(sameSource && previous?.target_language === result.target_language ? previous.translation : "", result.translation);
-  }
+  // Separate utterances can legitimately repeat words. Do not independently
+  // clip translated prefixes; that changes meaning and can erase a whole line.
   if (!result.original) return;
 
   elements.emptyState.hidden = true;
@@ -878,6 +860,7 @@ async function startMicrophoneCapture() {
   });
   state.audioContext = new AudioContext({ latencyHint: "interactive" });
   state.sampleRate = state.audioContext.sampleRate;
+  state.microphoneSegmenter = new MicrophoneSegmenter(state.sampleRate);
   state.sourceNode = state.audioContext.createMediaStreamSource(state.stream);
   state.silentGain = state.audioContext.createGain();
   state.silentGain.gain.value = 0;
@@ -903,19 +886,13 @@ async function pollSystemAudio() {
     state.systemPollController = controller;
     try {
       const response = await fetch("/api/audio/system/chunk?timeout=5", { signal: controller.signal, cache: "no-store" });
-      if (!state.systemAudioActive) break;
       if (response.status === 204) continue;
       if (!response.ok) {
         let detail = tf("systemAudioReadFailed", { status: response.status });
         try { detail = (await response.json()).detail || detail; } catch { /* no-op */ }
         throw new Error(detail);
       }
-      const duration = Number(response.headers.get("X-Audio-Duration")) || state.captureChunkSeconds;
-      const level = Number(response.headers.get("X-Audio-Level")) || 0;
-      const blob = await response.blob();
-      updateLevelMeter(level);
-      state.queue.push({ blob, duration, language: state.captureLanguage, audioSource: "system" });
-      processQueue();
+      await consumeSystemChunk(response);
     } catch (error) {
       if (error.name === "AbortError" || !state.systemAudioActive) break;
       state.systemAudioActive = false;
@@ -926,6 +903,20 @@ async function pollSystemAudio() {
       if (state.systemPollController === controller) state.systemPollController = null;
     }
   }
+}
+
+async function consumeSystemChunk(response) {
+  const duration = Number(response.headers.get("X-Audio-Duration")) || state.captureChunkSeconds;
+  const sequence = Number(response.headers.get("X-Audio-Sequence"));
+  if (sequence > state.lastSystemSequence + 1) warnAudioBehind();
+  state.lastSystemSequence = sequence;
+  updateLevelMeter(Number(response.headers.get("X-Audio-Level")) || 0);
+  enqueueAudio({
+    blob: await response.blob(), duration, sequence, audioSource: "system",
+    continuation: response.headers.get("X-Audio-Continuation") === "1",
+    startedAt: Number(response.headers.get("X-Audio-Started-At")),
+    endedAt: Number(response.headers.get("X-Audio-Ended-At")),
+  });
 }
 
 async function startSystemAudioCapture() {
@@ -939,13 +930,13 @@ async function startSystemAudioCapture() {
     }),
   });
   state.systemAudioActive = true;
-  pollSystemAudio();
+  state.systemPollTask = pollSystemAudio();
 }
 
 async function stopCaptureResources() {
   state.systemAudioActive = false;
-  state.systemPollController?.abort();
-  state.systemPollController = null;
+  // Let an in-flight response finish: aborting after the backend dequeues its
+  // audio would silently lose that sentence. Stop flushes the remaining tail.
   try { state.sourceNode?.disconnect(); } catch { /* no-op */ }
   try { state.captureNode?.disconnect(); } catch { /* no-op */ }
   state.stream?.getTracks().forEach((track) => track.stop());
@@ -955,7 +946,22 @@ async function stopCaptureResources() {
   state.sourceNode = null;
   state.captureNode = null;
   state.fallbackProcessor = null;
-  try { await api("/api/audio/system/stop", { method: "POST" }); } catch { /* The backend also stops on exit. */ }
+  try {
+    await api("/api/audio/system/stop", { method: "POST" });
+    await state.systemPollTask;
+    if (state.captureMode === "system" || state.captureMode === "both") {
+      for (;;) {
+        const response = await fetch("/api/audio/system/chunk?timeout=0.05", { cache: "no-store" });
+        if (response.status === 204) break;
+        if (!response.ok) throw new Error(tr("systemAudioInterrupted"));
+        await consumeSystemChunk(response);
+      }
+    }
+  } catch (error) {
+    toast(error.message, "error", 6500);
+  } finally {
+    state.systemPollTask = null;
+  }
 }
 
 function updateSourceHint() {
@@ -969,7 +975,11 @@ function updateSourceHint() {
 }
 
 async function startRecording() {
-  if (state.starting || state.recording) return;
+  if (state.starting || state.recording || state.stopping) return;
+  if (state.processing || state.queue.length) {
+    toast(tr("finishingLast"), "info");
+    return;
+  }
   state.starting = true;
   elements.recordButton.disabled = true;
   elements.recordLabel.textContent = tr("preparingEngine");
@@ -977,17 +987,14 @@ async function startRecording() {
   state.captureLanguage = elements.languageSelect.value;
   state.captureTarget = elements.targetLanguageSelect.value;
   state.captureMode = elements.audioSourceSelect.value;
-  const japaneseCapture = state.captureLanguage === "ja";
-  const englishCapture = state.captureLanguage === "en";
-  state.captureChunkSeconds = japaneseCapture
-    ? Math.max(state.chunkSeconds, 3.2)
-    : englishCapture ? Math.max(state.chunkSeconds, 2.8) : state.chunkSeconds;
-  state.captureOverlapSeconds = japaneseCapture
-    ? Math.max(state.overlapSeconds, .8)
-    : englishCapture ? Math.max(state.overlapSeconds, .7) : state.overlapSeconds;
+  state.sessionId += 1;
+  state.lastSystemSequence = 0;
+  state.captureChunkSeconds = state.chunkSeconds;
+  state.captureOverlapSeconds = .6;
   state.buffers = [];
   state.bufferedFrames = 0;
   try {
+    await state.releasePromise;
     await api("/api/engine/prepare", { method: "POST" });
     state.recording = true;
     if (state.captureMode === "microphone") {
@@ -1018,6 +1025,7 @@ async function startRecording() {
     toast(permissionDenied ? tr("micPermission") : tf("audioStartFailed", { error: error.message }), "error", 6500);
   } finally {
     state.starting = false;
+    if (!state.recording) await releaseEngineIfIdle();
     elements.recordButton.disabled = false;
     if (!state.recording) {
       elements.recordLabel.textContent = tr("startInterpreting");
@@ -1028,11 +1036,18 @@ async function startRecording() {
 }
 
 async function stopRecording() {
+  if (state.stopping) return;
+  state.stopping = true;
+  elements.recordButton.disabled = true;
+  elements.recordLabel.textContent = tr("finishingLast");
+  setSessionState(tr("finishingLast"), false);
   state.recording = false;
   if (state.captureMode === "microphone" || state.captureMode === "both") flushAudio(true);
   state.buffers = [];
   state.bufferedFrames = 0;
   await stopCaptureResources();
+  state.stopping = false;
+  elements.recordButton.disabled = false;
   elements.recordButton.classList.remove("recording");
   elements.recordButton.setAttribute("aria-label", tr("startInterpreting"));
   elements.recordLabel.textContent = tr("startInterpreting");
@@ -1047,11 +1062,14 @@ async function stopRecording() {
 }
 
 async function releaseEngineIfIdle() {
-  if (state.recording || state.processing || state.queue.length) return;
+  if (state.recording || state.processing || state.queue.length || state.starting || state.stopping) return;
   try {
-    await api("/api/engine/release", { method: "POST" });
+    if (!state.releasePromise) state.releasePromise = api("/api/engine/release", { method: "POST" });
+    await state.releasePromise;
   } catch {
     // The process still releases all models during normal application exit.
+  } finally {
+    state.releasePromise = null;
   }
 }
 
@@ -1103,7 +1121,7 @@ async function exportTranscript() {
 }
 
 async function saveSettings() {
-  if (state.recording) {
+  if (state.recording || state.starting || state.stopping || state.processing || state.queue.length) {
     toast(tr("stopBeforeModel"), "error");
     return;
   }
