@@ -86,8 +86,10 @@ class LocalBackend:
         return bool(self._thread and self._thread.is_alive() and self._server and self._server.started)
 
     def start(self, timeout: float = BACKEND_START_TIMEOUT_SECONDS) -> None:
-        if self.running:
-            return
+        if self._thread and self._thread.is_alive():
+            if self.running and self._server and not self._server.should_exit:
+                return
+            raise RuntimeError("本地同传后端正在启动或退出，请稍后重试。")
         config = uvicorn.Config(
             "app.main:app",
             host=HOST,
@@ -124,7 +126,7 @@ class LocalBackend:
         ):
             startup_error = self._startup_error
             thread_alive = bool(self._thread and self._thread.is_alive())
-            self.stop()
+            self.stop(timeout=5.0)
             if startup_error is not None:
                 raise RuntimeError(f"本地同传后端启动失败：{startup_error}") from startup_error
             if not thread_alive:
@@ -132,15 +134,22 @@ class LocalBackend:
             raise RuntimeError(f"本地同传后端首次启动超过 {timeout:.0f} 秒，请重新启动应用。")
         LOGGER.info("Local backend ready after %.1f seconds", time.monotonic() - started_at)
 
-    def stop(self, timeout: float = 5.0) -> None:
+    def stop(self, timeout: float | None = None) -> bool:
+        # The desktop owns this server: do not finish Python's main thread
+        # while ASGI lifespan cleanup still needs asyncio's executor. Slow
+        # in-flight requests (e.g. update checks) can outlast a fixed join.
         if self._server:
             self._server.should_exit = True
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
             if self._thread.is_alive():
                 LOGGER.warning("Local backend thread did not stop within %.1f seconds", timeout)
+                # A bounded caller may retry; keep ownership and truthful state.
+                return False
         self._server = None
         self._thread = None
+        LOGGER.info("Local backend thread stopped")
+        return True
 
 
 class WindowsAppControl:
@@ -237,7 +246,6 @@ class DesktopBridge:
     """Small, explicit bridge for interactions that need Windows UI."""
 
     MAX_EXPORT_CHARS = 2_000_000
-    OVERLAY_HISTORY_LIMIT = 4
 
     def __init__(self) -> None:
         # Keep native objects private. pywebview exposes public JS API members
@@ -246,7 +254,6 @@ class DesktopBridge:
         self._overlay_window: Any | None = None
         self._native_overlay: Any | None = None
         self._latest_subtitle: dict[str, str] = {"original": "", "translation": "", "meta": ""}
-        self._overlay_history: list[dict[str, str]] = []
         self._overlay_locked = False
         self._overlay_positioned = False
         self._ui_language = "zh"
@@ -270,8 +277,6 @@ class DesktopBridge:
     def get_overlay_state(self) -> dict[str, Any]:
         return {
             **self._latest_subtitle,
-            "history": self._overlay_history_lines(),
-            "history_count": len(self._overlay_history),
             "locked": self._overlay_locked,
             "ui_language": self._ui_language,
         }
@@ -357,34 +362,14 @@ class DesktopBridge:
             "translation": str(payload.get("translation") or "")[:4000],
             "meta": str(payload.get("meta") or "")[:300],
         }
-        replace_latest = bool(payload.get("replace_latest"))
-        same_as_latest = bool(
-            self._overlay_history
-            and self._overlay_history[-1]["original"] == subtitle["original"]
-            and self._overlay_history[-1]["translation"] == subtitle["translation"]
-        )
-        if self._overlay_history and (replace_latest or same_as_latest):
-            self._overlay_history[-1] = subtitle
-        elif subtitle["original"] or subtitle["translation"]:
-            self._overlay_history.append(subtitle)
-            del self._overlay_history[:-self.OVERLAY_HISTORY_LIMIT]
         self._latest_subtitle = subtitle
-        self._render_overlay()
-        return {"ok": True, "history_count": len(self._overlay_history)}
-
-    def clear_overlay(self) -> dict[str, Any]:
-        self._latest_subtitle = {"original": "", "translation": "", "meta": ""}
-        self._overlay_history.clear()
         self._render_overlay()
         return {"ok": True}
 
-    def _overlay_history_lines(self) -> list[str]:
-        lines: list[str] = []
-        for subtitle in self._overlay_history:
-            text = (subtitle["translation"] or subtitle["original"]).strip()
-            if text:
-                lines.append(" ".join(text.split())[:600])
-        return lines[-self.OVERLAY_HISTORY_LIMIT:]
+    def clear_overlay(self) -> dict[str, Any]:
+        self._latest_subtitle = {"original": "", "translation": "", "meta": ""}
+        self._render_overlay()
+        return {"ok": True}
 
     def resize_overlay(self, width: int, height: int) -> dict[str, Any]:
         if self._native_overlay is None:
@@ -421,10 +406,7 @@ class DesktopBridge:
         if self._native_overlay is None:
             return
         try:
-            self._native_overlay.update(
-                **self._latest_subtitle,
-                history=self._overlay_history_lines(),
-            )
+            self._native_overlay.update(**self._latest_subtitle)
         except Exception:
             LOGGER.debug("Native overlay is not ready yet", exc_info=True)
 
@@ -635,28 +617,60 @@ def main() -> int:
                     "language: localStorage.getItem('yisheng-ui-language'),"
                     "title: document.title,"
                     "settings: document.getElementById('settingsButton').getAttribute('title'),"
-                    "target: document.querySelector('label[for=\"targetLanguageSelect\"]').textContent"
+                    "target: document.querySelector('label[for=\"targetLanguageSelect\"]').textContent,"
+                    "koreanSource: Array.from(document.getElementById('languageSelect').options).some(o => o.value === 'ko' && o.textContent === 'Korean'),"
+                    "koreanTarget: Array.from(document.getElementById('targetLanguageSelect').options).some(o => o.value === 'ko' && o.textContent === 'Korean')"
                     "})"
                 )
                 bridge.set_ui_language("en")
+                korean_capabilities = window.evaluate_js(
+                    "(() => { const source = document.getElementById('languageSelect');"
+                    "const target = document.getElementById('targetLanguageSelect');"
+                    "source.value = 'ko'; target.value = 'zh'; refreshTranslationState();"
+                    "const koToZh = document.getElementById('translationStatus').textContent;"
+                    "source.value = 'zh'; target.value = 'ko'; refreshTranslationState();"
+                    "const zhToKo = document.getElementById('translationStatus').textContent;"
+                    "source.value = 'auto'; target.value = 'zh'; refreshTranslationState();"
+                    "return {koToZh, zhToKo}; })()"
+                )
                 bridge.update_overlay({
-                    "original": "First rolling subtitle",
-                    "translation": "第一句保留在最上方",
-                    "meta": "Base · CPU · 80 ms",
+                    "original": "문을 열지 마세요.",
+                    "translation": "잠시 기다려 주세요.",
+                    "meta": "Korean subtitle smoke test",
                 })
+                korean_state = bridge._native_overlay.debug_state()
+                korean_ok = bool(
+                    korean_state.get("original") == "문을 열지 마세요."
+                    and korean_state.get("translation") == "잠시 기다려 주세요."
+                    and korean_capabilities
+                    and korean_capabilities.get("koToZh") == "Installed · Available offline"
+                    and korean_capabilities.get("zhToKo") == "Installed · Available offline"
+                )
+                LOGGER.info("Korean UI and native subtitle capabilities: %s; text=%s", korean_capabilities, korean_ok)
+                single_subtitle_ok = True
+                for index in range(1, 6):
+                    sample = {
+                        "original": f"Current sentence {index}",
+                        "translation": f"当前第 {index} 句，不保留前一句",
+                        "meta": "Base · CPU · 100 ms",
+                    }
+                    bridge.update_overlay(sample)
+                    current_state = bridge._native_overlay.debug_state()
+                    single_subtitle_ok = bool(
+                        single_subtitle_ok
+                        and current_state.get("original") == sample["original"]
+                        and current_state.get("translation") == sample["translation"]
+                        and "history" not in current_state
+                    )
+                bridge.clear_overlay()
+                single_subtitle_ok = bool(
+                    single_subtitle_ok
+                    and not bridge._native_overlay.debug_state().get("has_content")
+                    and bridge.get_overlay_snapshot() == {"original": "", "translation": "", "meta": ""}
+                )
                 bridge.update_overlay({
-                    "original": "Second rolling subtitle",
-                    "translation": "第二句随新内容向上滚动",
-                    "meta": "Base · CPU · 90 ms",
-                })
-                bridge.update_overlay({
-                    "original": "Third rolling subtitle",
-                    "translation": "第三句仍然可以继续阅读",
-                    "meta": "Base · CPU · 100 ms",
-                })
-                bridge.update_overlay({
-                    "original": "Current subtitle remains highlighted",
-                    "translation": "第四句作为当前译文高亮",
+                    "original": "Only the current sentence is displayed",
+                    "translation": "迷你字幕只显示当前一句",
                     "meta": "Base · CPU · 120 ms",
                 })
                 bridge.set_overlay_transparency(100)
@@ -667,6 +681,31 @@ def main() -> int:
                     window.destroy()
                     return
                 time.sleep(0.35)
+                bridge.update_overlay({
+                    "original": "문을 열지 마세요.",
+                    "translation": "请不要开门。",
+                    "meta": "Korean to Chinese",
+                })
+                time.sleep(0.15)
+                visible_korean_source = bridge._native_overlay.debug_state()
+                bridge.update_overlay({
+                    "original": "请稍等。",
+                    "translation": "잠시 기다려 주세요.",
+                    "meta": "Chinese to Korean",
+                })
+                time.sleep(0.15)
+                visible_korean_target = bridge._native_overlay.debug_state()
+                korean_ok = bool(
+                    korean_ok
+                    and visible_korean_source.get("original") == "문을 열지 마세요."
+                    and visible_korean_target.get("translation") == "잠시 기다려 주세요."
+                )
+                LOGGER.info("Visible Korean subtitle switch passed: %s", korean_ok)
+                bridge.update_overlay({
+                    "original": "Only the current sentence is displayed",
+                    "translation": "迷你字幕只显示当前一句",
+                    "meta": "Base · CPU · 120 ms",
+                })
                 bridge.set_overlay_locked(False)
                 resize_result = bridge.resize_overlay(760, 300)
                 saved_style = bridge._native_overlay.debug_state()
@@ -692,6 +731,9 @@ def main() -> int:
                     and language_capabilities.get("title") == "YiSheng · Local Live Interpreter"
                     and language_capabilities.get("settings") == "Settings"
                     and language_capabilities.get("target") == "Translate to"
+                    and language_capabilities.get("koreanSource")
+                    and language_capabilities.get("koreanTarget")
+                    and korean_ok
                     and overlay_capabilities.get("ui_language") == "en"
                     and overlay_capabilities.get("style_button") == "Text style"
                     and overlay_capabilities.get("locked")
@@ -705,8 +747,11 @@ def main() -> int:
                     and style_capabilities.get("translation_font_size") == 24
                     and style_capabilities.get("original_color") == "#66CCFF"
                     and style_capabilities.get("translation_color") == "#FFCC66"
-                    and overlay_capabilities.get("history_visible")
-                    and overlay_capabilities.get("history") == ["第一句保留在最上方", "第二句随新内容向上滚动", "第三句仍然可以继续阅读", "第四句作为当前译文高亮"]
+                    and single_subtitle_ok
+                    and overlay_capabilities.get("has_content")
+                    and overlay_capabilities.get("original") == "Only the current sentence is displayed"
+                    and overlay_capabilities.get("translation") == "迷你字幕只显示当前一句"
+                    and "history" not in overlay_capabilities
                     and not overlay_capabilities.get("style_visible")
                 )
                 if not overlay_ok:
@@ -724,24 +769,9 @@ def main() -> int:
                 LOGGER.info("Desktop smoke test destroy request completed")
             elif visual_overlay_test:
                 bridge.update_overlay({
-                    "original": "The first sentence moves to the top",
-                    "translation": "第一句移动到最上方，直到第五句到来才消失",
-                    "meta": "滚动字幕检查 1/4",
-                })
-                bridge.update_overlay({
-                    "original": "The second sentence remains readable",
-                    "translation": "第二句保留在队列中，可以继续阅读",
-                    "meta": "滚动字幕检查 2/4",
-                })
-                bridge.update_overlay({
-                    "original": "The third sentence follows naturally",
-                    "translation": "第三句自然向上移动，不会突然清空",
-                    "meta": "滚动字幕检查 3/4",
-                })
-                bridge.update_overlay({
-                    "original": "The newest sentence stays highlighted at the bottom",
-                    "translation": "第四句固定在最下方，并作为当前译文高亮",
-                    "meta": "滚动字幕检查 4/4",
+                    "original": "Only the current sentence is displayed in the mini window",
+                    "translation": "迷你窗口只显示当前原文与译文，历史记录保留在主界面",
+                    "meta": "当前字幕显示检查",
                 })
                 bridge.set_overlay_locked(False)
                 bridge.set_overlay_transparency(100)

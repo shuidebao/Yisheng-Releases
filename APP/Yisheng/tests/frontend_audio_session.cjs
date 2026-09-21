@@ -6,6 +6,10 @@ const previous = { _sessionId: 1, audio_source: "system", _sequence: 1, _endedAt
 const next = { sessionId: 1, audioSource: "system", sequence: 2, startedAt: 7.4,
   continuation: true, language: "auto", target: "zh" };
 assert.deepEqual(recognitionPlan(previous, next), { language: "en", context: "We need to" });
+const koreanPrevious = { ...previous, language: "ko", original: "저는 지금 집에" };
+assert.deepEqual(recognitionPlan(koreanPrevious, next), { language: "ko", context: "저는 지금 집에" });
+assert.deepEqual(recognitionPlan(koreanPrevious, { ...next, continuation: false }), { language: "auto", context: "" });
+assert.deepEqual(recognitionPlan(koreanPrevious, { ...next, language: "ko" }), { language: "ko", context: "저는 지금 집에" });
 for (const changes of [
   { sessionId: 2 }, { audioSource: "microphone" }, { sequence: 3 }, { startedAt: 25 },
   { continuation: false }, { target: "ja" },

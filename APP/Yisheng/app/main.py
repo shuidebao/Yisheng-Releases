@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import tempfile
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -12,11 +10,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import APP_NAME, COPYRIGHT, DEVELOPER, OFFICIAL_REPOSITORY, __version__
-from .cache import TEMP_AUDIO_PREFIX, cache_status, clear_cache
+from .cache import cache_status, clear_cache
 from .config import LANGUAGES, ROOT
 from .engine import InterpreterEngine
 from .system_audio import SystemAudioError, SystemAudioManager
-from .translation import TranslationUnavailable
+from .translation import TRANSLATION_LANGUAGES, TranslationUnavailable
 from .updater import update_manager
 from .whisper_models import model_status, models_status, start_model_download
 
@@ -224,7 +222,7 @@ def update_config(config: EngineConfig) -> dict:
 async def install_translation_model(source_code: str, target: str = Query("zh")) -> dict:
     if source_code not in LANGUAGES or source_code == "auto":
         raise HTTPException(status_code=400, detail="请先选择明确的原语言。")
-    if target not in {"zh", "ja", "en"}:
+    if target not in TRANSLATION_LANGUAGES:
         raise HTTPException(status_code=400, detail="不支持的翻译目标语言。")
     try:
         installed = await asyncio.to_thread(engine.translator.install_pair, source_code, target)
@@ -245,7 +243,7 @@ async def transcribe(
 ) -> JSONResponse:
     if language not in LANGUAGES:
         raise HTTPException(status_code=400, detail="不支持的语言。")
-    if target not in {"zh", "ja", "en"}:
+    if target not in TRANSLATION_LANGUAGES:
         raise HTTPException(status_code=400, detail="不支持的翻译目标语言。")
     body = await request.body()
     if not body:
@@ -253,23 +251,15 @@ async def transcribe(
     if len(body) > MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail="音频块过大。")
 
-    suffix = ".wav" if "wav" in request.headers.get("content-type", "") else ".webm"
-    path: Path | None = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, prefix=TEMP_AUDIO_PREFIX, suffix=suffix) as handle:
-            handle.write(body)
-            path = Path(handle.name)
         source = LANGUAGES[language]["whisper"] or None
-        result = await asyncio.to_thread(engine.transcribe, path, source, duration, context, target)
+        result = await asyncio.to_thread(engine.transcribe, body, source, duration, context, target)
         return JSONResponse(result.to_dict())
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         logging.exception("Transcription failed")
         raise HTTPException(status_code=500, detail=f"转写失败：{exc}") from exc
-    finally:
-        if path:
-            path.unlink(missing_ok=True)
 
 
 @app.get("/")

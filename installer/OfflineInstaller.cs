@@ -50,7 +50,7 @@ internal sealed class InstallerForm : Form
     private const string InstallerVersion = BuildInfo.Version;
     private const long Megabyte = 1024L * 1024L;
     private const long Gigabyte = 1024L * 1024L * 1024L;
-    private const long InstalledSpaceRequired = 1000L * Megabyte;
+    private const long InstalledSpaceRequired = 1300L * Megabyte;
     private readonly TextBox pathBox = new TextBox();
     private readonly Button browseButton = new Button();
     private readonly Button installButton = new Button();
@@ -87,7 +87,7 @@ internal sealed class InstallerForm : Form
         Controls.Add(version);
 
         Label description = new Label();
-        description.Text = "已包含 Base 语音识别和中 / 日 / 英互译模型，无需另外下载。\r\nIncludes Base speech recognition and offline Chinese / Japanese / English translation models.";
+        description.Text = "已包含 Base 语音识别和中 / 日 / 英 / 韩互译模型，无需另外下载。\r\nIncludes Base speech recognition and offline Chinese / Japanese / English / Korean translation models.";
         description.AutoSize = true;
         description.MaximumSize = new Size(705, 55);
         description.ForeColor = Color.Silver;
@@ -118,7 +118,7 @@ internal sealed class InstallerForm : Form
         Controls.Add(browseButton);
 
         Label hint = new Label();
-        hint.Text = "至少 4 GB 内存和约 1.6 GB 磁盘空间 / Requires 4 GB RAM and about 1.6 GB free disk space.";
+        hint.Text = "至少 4 GB 内存，建议预留 2.5 GB 磁盘空间 / Requires 4 GB RAM; allow 2.5 GB free disk space.";
         hint.AutoSize = true;
         hint.MaximumSize = new Size(705, 42);
         hint.ForeColor = Color.Gray;
@@ -467,6 +467,18 @@ internal sealed class InstallerForm : Form
             Path.Combine(".models", "argos", "translate-zh_en-1_9", "model", "model.bin"),
             Path.Combine(".models", "argos", "en_ja", "model", "model.bin"),
             Path.Combine(".models", "translations", "ja_en", "model.bin"),
+            Path.Combine(".models", "translations", "ko_en", "model.bin"),
+            Path.Combine(".models", "translations", "ko_en", "source.spm"),
+            Path.Combine(".models", "translations", "ko_en", "target.spm"),
+            Path.Combine(".models", "translations", "ko_en", "config.json"),
+            Path.Combine(".models", "translations", "ko_en", "LICENSE"),
+            Path.Combine(".models", "translations", "ko_en", "YISHENG-MODEL-NOTICE.md"),
+            Path.Combine(".models", "translations", "en_ko", "model.bin"),
+            Path.Combine(".models", "translations", "en_ko", "source.spm"),
+            Path.Combine(".models", "translations", "en_ko", "target.spm"),
+            Path.Combine(".models", "translations", "en_ko", "config.json"),
+            Path.Combine(".models", "translations", "en_ko", "LICENSE"),
+            Path.Combine(".models", "translations", "en_ko", "YISHENG-MODEL-NOTICE.md"),
             Path.Combine("app", "main.py"),
             Path.Combine("static", "index.html")
         };

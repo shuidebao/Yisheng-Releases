@@ -7,11 +7,11 @@ const UI_TEXT = {
     pageTitle: "译声 · 本地同声传译", brandHome: "译声首页", versionLoading: "版本读取中…",
     switchLanguage: "切换中文或英文界面", openMini: "打开迷你置顶字幕", miniTitle: "迷你置顶字幕",
     miniSubtitle: "迷你字幕", openSettings: "打开设置", settings: "设置", ready: "准备就绪",
-    heroLead: "听见原声，", heroAccent: "即刻读懂。", heroCopy: "语音不上传云端。中文、日语、英语在你的电脑上完成识别与互译。",
+    heroLead: "听见原声，", heroAccent: "即刻读懂。", heroCopy: "语音不上传云端。中文、日语、英语、韩语在你的电脑上完成识别与互译。",
     latency: "处理延迟", recognizedLanguage: "识别语言", segments: "片段", original: "原文",
     clearHistory: "清空记录", waitingVoice: "等待你的声音", startHelp: "选择原语言和翻译目标，然后点击下方按钮开始同传",
-    processing: "正在识别与翻译…", sourceLanguage: "原语言", autoThree: "自动识别（中文/日语/英语）",
-    chinese: "中文", english: "英语", japanese: "日语", translateTo: "翻译为", audioSource: "声音来源",
+    processing: "正在识别与翻译…", sourceLanguage: "原语言", autoLanguages: "自动识别（中文/日语/英语/韩语）",
+    chinese: "中文", english: "英语", japanese: "日语", korean: "韩语", translateTo: "翻译为", audioSource: "声音来源",
     microphoneOption: "麦克风（面对电脑说话）", systemOption: "电脑声音（游戏/视频推荐）", bothOption: "麦克风 + 电脑",
     startInterpreting: "开始同传", clickMicrophone: "点击开启麦克风", exportText: "导出文本",
     updateAvailable: "新版本可用", updateTitle: "译声可以更新", readingVersion: "正在读取版本信息…",
@@ -30,7 +30,7 @@ const UI_TEXT = {
     cachePreserve: "保留已下载模型与字幕", calculating: "正在计算…", cacheItems: "临时音频、网页缓存与旧日志",
     clearCache: "清理缓存", applySettings: "应用设置", about: "关于", version: "版本", loading: "读取中…",
     runtimeLocal: "桌面本地处理 · 免费", runtimeWeb: "本地处理 · 免费",
-    translationSuffix: "翻译", currentLanguage: "当前语言", autoDetectShort: "自动识别中/日/英",
+    translationSuffix: "翻译", currentLanguage: "当前语言", autoDetectShort: "自动识别中/日/英/韩",
     translationReady: "已安装 · 可离线使用", translationBroken: "内置模型不完整",
     microphone: "麦克风", systemAudio: "电脑声音", bothAudio: "麦克风 + 电脑", sound: "声音",
     requestFailed: "请求失败 ({status})", currentLatest: "当前 {current} → 最新 {latest}", defaultReleaseNotes: "修复问题并提升稳定性。",
@@ -63,11 +63,11 @@ const UI_TEXT = {
     pageTitle: "YiSheng · Local Live Interpreter", brandHome: "YiSheng home", versionLoading: "Loading version…",
     switchLanguage: "Switch between Chinese and English", openMini: "Open always-on-top mini subtitles", miniTitle: "Mini subtitles",
     miniSubtitle: "Mini subtitles", openSettings: "Open settings", settings: "Settings", ready: "Ready",
-    heroLead: "Hear every word. ", heroAccent: "Understand it now.", heroCopy: "Audio never goes to the cloud. Chinese, Japanese, and English are recognized and translated locally on your PC.",
+    heroLead: "Hear every word. ", heroAccent: "Understand it now.", heroCopy: "Audio never goes to the cloud. Chinese, Japanese, English, and Korean are recognized and translated locally on your PC.",
     latency: "Latency", recognizedLanguage: "Language", segments: "Segments", original: "Original",
     clearHistory: "Clear history", waitingVoice: "Waiting for audio", startHelp: "Choose a source and target language, then start live interpretation below.",
-    processing: "Recognizing and translating…", sourceLanguage: "Source language", autoThree: "Auto detect (Chinese/Japanese/English)",
-    chinese: "Chinese", english: "English", japanese: "Japanese", translateTo: "Translate to", audioSource: "Audio source",
+    processing: "Recognizing and translating…", sourceLanguage: "Source language", autoLanguages: "Auto detect (Chinese/Japanese/English/Korean)",
+    chinese: "Chinese", english: "English", japanese: "Japanese", korean: "Korean", translateTo: "Translate to", audioSource: "Audio source",
     microphoneOption: "Microphone (speak to your PC)", systemOption: "Computer audio (games/videos)", bothOption: "Microphone + computer",
     startInterpreting: "Start interpreting", clickMicrophone: "Click to start the microphone", exportText: "Export text",
     updateAvailable: "Update available", updateTitle: "YiSheng can be updated", readingVersion: "Reading version information…",
@@ -86,7 +86,7 @@ const UI_TEXT = {
     cachePreserve: "Downloaded models and subtitles are kept", calculating: "Calculating…", cacheItems: "Temporary audio, web cache, and old logs",
     clearCache: "Clear cache", applySettings: "Apply settings", about: "About", version: "Version", loading: "Loading…",
     runtimeLocal: "Local desktop processing · Free", runtimeWeb: "Local processing · Free",
-    translationSuffix: " translation", currentLanguage: "current language", autoDetectShort: "Auto detect ZH/JA/EN",
+    translationSuffix: " translation", currentLanguage: "current language", autoDetectShort: "Auto detect ZH/JA/EN/KO",
     translationReady: "Installed · Available offline", translationBroken: "Bundled model is incomplete",
     microphone: "Microphone", systemAudio: "Computer audio", bothAudio: "Microphone + computer", sound: "Audio",
     requestFailed: "Request failed ({status})", currentLatest: "Current {current} → Latest {latest}", defaultReleaseNotes: "Bug fixes and stability improvements.",
@@ -540,7 +540,7 @@ function refreshTranslationState() {
   const source = elements.languageSelect.value;
   const target = elements.targetLanguageSelect.value;
   const pairs = state.status.translation_pairs || [];
-  const sources = source === "auto" ? ["zh", "ja", "en"] : [source];
+  const sources = source === "auto" ? ["zh", "ja", "en", "ko"] : [source];
   const ready = sources.every((item) => item === target || pairs.includes(`${item}-${target}`));
   const sourceLabel = source === "auto" ? tr("autoDetectShort") : (languageNames[source] || tr("currentLanguage"));
   const targetLabel = languageNames[target] || target;
@@ -837,7 +837,6 @@ function appendSegment(result) {
       original: result.original,
       translation: result.translation_ready ? result.translation : tr("translationModelUnavailable"),
       meta: `${timestamp} · ${modelLabels[result.model] || result.model} · ${result.latency_ms} ms`,
-      replace_latest: continuing,
     }).catch(() => {});
   }
 }

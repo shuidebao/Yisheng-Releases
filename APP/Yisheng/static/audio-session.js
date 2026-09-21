@@ -21,7 +21,7 @@
     const adjacent = adjacentCapture(previous, chunk);
     const continuous = adjacent && chunk.continuation === true;
     const confident = continuous && Number(previous?.language_probability) >= .7
-      && ["zh", "ja", "en"].includes(previous?.language);
+      && ["zh", "ja", "en", "ko"].includes(previous?.language);
     const language = chunk.language === "auto" && confident ? previous.language : chunk.language;
     const context = continuous && previous.target_language === chunk.target
       && language !== "auto" && previous.language === language

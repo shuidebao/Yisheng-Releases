@@ -128,7 +128,9 @@ def merge_continuation(previous: str, current: str, language: str | None = None)
     if not current:
         return previous
 
-    if language in {"ja", "zh", "ko"}:
+    # Korean uses spaces between words; preserve them with the word-based
+    # overlap path below, rather than compacting it like Han/Kana text.
+    if language in {"ja", "zh"}:
         old_compact = re.sub(r"\s+", "", previous)
         new_compact = re.sub(r"\s+", "", current)
         max_overlap = min(48, len(old_compact), len(new_compact))

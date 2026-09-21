@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import gc
+import io
 import logging
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .audio_input import prepare_audio_input
 from .config import (
     WHISPER_MODEL_ROOT,
     HardwareInfo,
@@ -67,6 +69,9 @@ class TranscriptResult:
     translation_ready: bool
     continued: bool = False
     warning: str | None = None
+    # Backend processing only: capture/endpointing and frontend queue time are
+    # not included. Keep the existing latency_ms meaning for old frontends.
+    timings_ms: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -260,7 +265,7 @@ class InterpreterEngine:
 
     def transcribe(
         self,
-        media_path: Path,
+        media_path: Path | bytes,
         source_language: str | None,
         audio_seconds: float = 0.0,
         context: str = "",
@@ -268,38 +273,49 @@ class InterpreterEngine:
     ) -> TranscriptResult:
         started = time.perf_counter()
         with self._model_lock:
+            lock_acquired = time.perf_counter()
             model = self._load_model()
+            model_ready = time.perf_counter()
             decode_options = _transcription_options(source_language, context)
             try:
-                segments, info = model.transcribe(
-                    str(media_path),
-                    **decode_options,
-                )
-                original = clean_transcript(" ".join(segment.text for segment in segments))
-            except Exception as exc:
-                # Some CUDA linkage failures only surface on the first inference.
-                if self.active_device != "cuda":
-                    if self._is_memory_error(exc):
-                        raise RuntimeError(self._memory_message()) from exc
-                    raise
-                self.last_error = f"GPU 推理失败，已自动切换 CPU：{exc}"
-                self._model = None
-                self.active_device = "cpu"
-                self.compute_type = "int8"
-                self._check_available_memory()
-                self._model = self._create_model(ensure_whisper_model(self.model_name), "cpu", "int8")
-                segments, info = self._model.transcribe(
-                    str(media_path),
-                    **decode_options,
-                )
-                original = clean_transcript(" ".join(segment.text for segment in segments))
+                audio = prepare_audio_input(media_path)
+            except MemoryError as exc:
+                raise RuntimeError(self._memory_message()) from exc
+            audio_ready = time.perf_counter()
+            try:
+                try:
+                    segments, info = model.transcribe(audio, **decode_options)
+                    original = clean_transcript(" ".join(segment.text for segment in segments))
+                except Exception as exc:
+                    # Some CUDA linkage failures only surface on the first inference.
+                    if self.active_device != "cuda":
+                        if self._is_memory_error(exc):
+                            raise RuntimeError(self._memory_message()) from exc
+                        raise
+                    self.last_error = f"GPU 推理失败，已自动切换 CPU：{exc}"
+                    self._model = None
+                    self.active_device = "cpu"
+                    self.compute_type = "int8"
+                    self._check_available_memory()
+                    self._model = self._create_model(ensure_whisper_model(self.model_name), "cpu", "int8")
+                    # PyAV may already have consumed an in-memory fallback
+                    # stream before a CUDA generator raises. Retry from byte 0.
+                    if isinstance(audio, io.BytesIO):
+                        audio.seek(0)
+                    segments, info = self._model.transcribe(audio, **decode_options)
+                    original = clean_transcript(" ".join(segment.text for segment in segments))
+            finally:
+                if isinstance(audio, io.BytesIO):
+                    audio.close()
 
             detected = getattr(info, "language", None) or source_language or "en"
             probability = float(getattr(info, "language_probability", 0.0) or 0.0)
             continued = bool(context.strip() and original)
             if continued:
                 original = merge_continuation(context, original, detected)
+            recognition_finished = time.perf_counter()
             translated = self.translator.translate(original, detected, target_language)
+            translation_finished = time.perf_counter()
 
         latency = int((time.perf_counter() - started) * 1000)
         return TranscriptResult(
@@ -315,4 +331,11 @@ class InterpreterEngine:
             translation_ready=translated.ready,
             continued=continued,
             warning=translated.warning or self.last_error,
+            timings_ms={
+                "lock_wait": round((lock_acquired - started) * 1000, 3),
+                "model_load": round((model_ready - lock_acquired) * 1000, 3),
+                "audio_prepare": round((audio_ready - model_ready) * 1000, 3),
+                "recognition": round((recognition_finished - audio_ready) * 1000, 3),
+                "translation": round((translation_finished - recognition_finished) * 1000, 3),
+            },
         )

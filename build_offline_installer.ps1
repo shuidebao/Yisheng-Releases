@@ -47,7 +47,7 @@ Write-Host ("[1/5] Rebuilding the {0} desktop launcher..." -f $Version) -Foregro
 & (Join-Path $SourcePath "build_desktop.ps1")
 if ($LASTEXITCODE -ne 0) { throw "Desktop launcher build failed." }
 
-Write-Host "[2/5] Checking the offline Base and three-language translation models..." -ForegroundColor Cyan
+Write-Host "[2/5] Checking the offline Base and four-language translation models..." -ForegroundColor Cyan
 $Required = @(
     "VERSION",
     "Yisheng.exe",
@@ -59,6 +59,18 @@ $Required = @(
     ".models\argos\translate-zh_en-1_9\model\model.bin",
     ".models\argos\en_ja\model\model.bin",
     ".models\translations\ja_en\model.bin",
+    ".models\translations\ko_en\model.bin",
+    ".models\translations\ko_en\source.spm",
+    ".models\translations\ko_en\target.spm",
+    ".models\translations\ko_en\config.json",
+    ".models\translations\ko_en\LICENSE",
+    ".models\translations\ko_en\YISHENG-MODEL-NOTICE.md",
+    ".models\translations\en_ko\model.bin",
+    ".models\translations\en_ko\source.spm",
+    ".models\translations\en_ko\target.spm",
+    ".models\translations\en_ko\config.json",
+    ".models\translations\en_ko\LICENSE",
+    ".models\translations\en_ko\YISHENG-MODEL-NOTICE.md",
     "app\main.py",
     "static\index.html"
 )
@@ -70,6 +82,7 @@ foreach ($Relative in $Required) {
 Write-Host "[3/5] Compressing the ready-to-run offline application..." -ForegroundColor Cyan
 $TarArguments = @(
     "-a", "-c", "-f", $PayloadPath,
+    "--exclude=.build",
     "--exclude=.models/whisper/local/medium",
     "--exclude=.models/whisper/local/tiny",
     "--exclude=.models/whisper/local/small",
@@ -77,6 +90,7 @@ $TarArguments = @(
     "--exclude=.models/webview-test-profile",
     "--exclude=.models/webview-probe-profile",
     "--exclude=.models/overlay-style.json",
+    "--exclude=.models/clear-webview-cache",
     "--exclude=.models/packages",
     "--exclude=.models/argos-state",
     "--exclude=logs",
