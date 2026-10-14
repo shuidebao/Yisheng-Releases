@@ -1,5 +1,13 @@
 # 译声第三方模型说明
 
+## 可选 VR 显示组件（1.0.25 起随实验版安装包提供）
+
+- Python OpenVR 2.12.1401，Christopher Bruns 与贡献者，BSD 3-Clause；完整许可见 `licenses/Python-OpenVR.txt`，来源 https://pypi.org/project/openvr/2.12.1401/ 。
+- OpenVR SDK / native library，Valve Corporation，BSD 3-Clause；完整许可见 `licenses/Valve-OpenVR.txt`，来源 https://github.com/ValveSoftware/openvr/tree/v2.12.14 。
+- 仅用户开启 SteamVR 字幕时使用；与语音识别和翻译模型无关。1.0.24 及更早安装包不含这些组件。
+
+## 本地模型
+
 译声的语音识别与翻译均在用户电脑本地运行。最终安装包包含：
 
 - Faster-Whisper Base / Whisper Base，MIT License。

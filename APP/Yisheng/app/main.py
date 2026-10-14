@@ -3,11 +3,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from typing import Literal
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StrictBool, StrictStr
 
 from . import APP_NAME, COPYRIGHT, DEVELOPER, OFFICIAL_REPOSITORY, __version__
 from .cache import cache_status, clear_cache
@@ -42,6 +46,84 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="译声", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
+class TranslationBodyLimit:
+    """Bound secret-bearing JSON before framework validation reads the body."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        protected = {"/api/translation/config", "/api/translation/test"}
+        if scope["type"] != "http" or scope.get("path", "").rstrip("/") not in protected or scope.get("method") != "POST":
+            return await self.app(scope, receive, send)
+        headers = dict(scope.get("headers", []))
+        media_type = headers.get(b"content-type", b"").split(b";", 1)[0].strip().lower()
+        if media_type != b"application/json":
+            return await JSONResponse({"detail": "API 设置必须使用 JSON 格式。"}, status_code=415)(scope, receive, send)
+        parts, size = [], 0
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            size += len(chunk)
+            if size > 16 * 1024:
+                return await JSONResponse({"detail": "API 设置内容过大。"}, status_code=413)(scope, receive, send)
+            parts.append(chunk)
+            if not message.get("more_body", False):
+                break
+        body = b"".join(parts)
+        delivered = False
+        async def replay():
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            return await receive()
+        await self.app(scope, replay, send)
+
+
+app.add_middleware(TranslationBodyLimit)
+
+
+@app.middleware("http")
+async def protect_local_api(request: Request, call_next):
+    # A web page must not be able to change the destination of recognized text
+    # or spend a user's configured API credentials through this loopback service.
+    if request.url.path.startswith("/api/"):
+        try:
+            destination = urlsplit(str(request.url))
+            allowed = destination.hostname in {"127.0.0.1", "localhost", "::1"}
+            origin = request.headers.get("origin")
+            if origin is not None:
+                source = urlsplit(origin)
+                allowed = allowed and (
+                    source.scheme == destination.scheme
+                    and source.netloc == destination.netloc
+                    and not source.path and not source.query and not source.fragment
+                )
+            if request.headers.get("sec-fetch-site") == "cross-site":
+                allowed = False
+        except ValueError:
+            allowed = False
+        if not allowed:
+            return JSONResponse({"detail": "仅允许译声本机界面访问此接口。"}, status_code=403)
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def redact_translation_validation(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith("/api/translation/"):
+        # Pydantic's default validation response includes the rejected input.
+        # That input can be an API key, including in malformed JSON documents.
+        return JSONResponse({"detail": "API 设置格式不正确，请检查地址、模型、密钥与确认选项。"}, status_code=422)
+    return await request_validation_exception_handler(request, exc)
+
+
 @app.middleware("http")
 async def prevent_stale_desktop_ui(request: Request, call_next):
     """Always load UI files from the installed version, not an older WebView cache."""
@@ -65,8 +147,17 @@ class EngineConfig(BaseModel):
     device: str = "auto"
 
 
+class TranslationConfig(BaseModel):
+    mode: Literal["local", "api"] = "local"
+    base_url: StrictStr = Field(default="", max_length=2048)
+    model: StrictStr = Field(default="", max_length=200)
+    api_key: StrictStr | None = Field(default=None, max_length=4096, repr=False)
+    consent: StrictBool = False
+
+
 class SystemAudioConfig(BaseModel):
     device_index: int | None = None
+    device_name: str | None = Field(default=None, max_length=512)
     chunk_seconds: float = 8.0
 
 
@@ -175,7 +266,7 @@ def system_audio_status() -> dict:
 @app.post("/api/audio/system/start")
 async def start_system_audio(config: SystemAudioConfig) -> dict:
     try:
-        return await asyncio.to_thread(system_audio.start, config.device_index, config.chunk_seconds)
+        return await asyncio.to_thread(system_audio.start, config.device_index, config.chunk_seconds, config.device_name)
     except SystemAudioError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -233,6 +324,40 @@ async def install_translation_model(source_code: str, target: str = Query("zh"))
         raise HTTPException(status_code=500, detail=f"内置模型检查失败：{exc}") from exc
 
 
+@app.post("/api/translation/config")
+async def update_translation_config(config: TranslationConfig) -> dict:
+    if system_audio.running:
+        raise HTTPException(status_code=409, detail="请先停止同传，再更改翻译模式。")
+    try:
+        return await asyncio.to_thread(
+            engine.configure_translation, config.mode, config.base_url, config.model, config.api_key, config.consent,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="无法应用翻译设置，请检查后重试。") from None
+
+
+@app.post("/api/translation/test")
+async def test_translation_api(config: TranslationConfig) -> dict:
+    if config.mode != "api":
+        raise HTTPException(status_code=400, detail="请先选择 API 翻译模式。")
+    if system_audio.running:
+        raise HTTPException(status_code=409, detail="请先停止同传，再测试 API。")
+    try:
+        return await asyncio.to_thread(
+            engine.test_translation_api, config.base_url, config.model, config.api_key, config.consent,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="API 测试失败，请检查服务设置。") from None
+
+
 @app.post("/api/transcribe")
 async def transcribe(
     request: Request,
@@ -240,6 +365,7 @@ async def transcribe(
     duration: float = Query(0.0, ge=0.0, le=3600.0),
     context: str = Query("", max_length=240),
     target: str = Query("zh"),
+    translation_revision: int | None = None,
 ) -> JSONResponse:
     if language not in LANGUAGES:
         raise HTTPException(status_code=400, detail="不支持的语言。")
@@ -253,7 +379,10 @@ async def transcribe(
 
     try:
         source = LANGUAGES[language]["whisper"] or None
-        result = await asyncio.to_thread(engine.transcribe, body, source, duration, context, target)
+        args = (body, source, duration, context, target)
+        if translation_revision is not None:
+            args += (translation_revision,)
+        result = await asyncio.to_thread(engine.transcribe, *args)
         return JSONResponse(result.to_dict())
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

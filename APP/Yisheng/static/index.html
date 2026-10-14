@@ -43,7 +43,8 @@
       <div>
         <p class="eyebrow"><span id="liveDot"></span><span id="sessionState" data-i18n="ready">准备就绪</span></p>
         <h1><span data-i18n="heroLead">听见原声，</span><em data-i18n="heroAccent">即刻读懂。</em></h1>
-        <p class="hero-copy" data-i18n="heroCopy">语音不上传云端。中文、日语、英语、韩语在你的电脑上完成识别与互译。</p>
+        <p class="hero-copy" data-i18n="heroCopy">语音始终在本机识别。默认离线翻译，也可在设置中自选 API 翻译文字。</p>
+        <span class="translation-mode-badge" id="translationModeBadge" role="status" aria-live="polite" data-i18n="readingMode">正在读取翻译模式…</span>
       </div>
       <div class="session-metrics" aria-label="会话指标">
         <div><span id="latencyMetric">—</span><small data-i18n="latency">处理延迟</small></div>
@@ -203,6 +204,53 @@
       <p class="field-help" id="systemAudioHelp" data-i18n="systemAudioHelp">自动捕获 Windows 正在播放的声音，不需要打开“立体声混音”。</p>
     </div>
 
+    <div class="setting-group" id="vrSettings">
+      <label data-vr-text="title">VR 私人字幕 · 实验版</label>
+      <p class="field-help" data-vr-text="help">先连接头显并启动 SteamVR，再开启字幕。优先面向 Quest PCVR；不支持一体机独立运行。录屏或直播可能捕获字幕。</p>
+      <p id="vrStatus" role="status" aria-live="polite">未开启</p>
+      <label for="vrSize" data-vr-text="size">字幕大小</label>
+      <input id="vrSize" type="range" min="0.6" max="1.6" step="0.05" value="1">
+      <label for="vrVertical" data-vr-text="vertical">上下位置</label>
+      <input id="vrVertical" type="range" min="-0.8" max="0.3" step="0.05" value="-0.35">
+      <label for="vrDistance" data-vr-text="distance">距离（米）</label>
+      <input id="vrDistance" type="number" min="0.8" max="3" step="0.1" value="1.5">
+      <label for="vrOpacity" data-vr-text="opacity">不透明度</label>
+      <input id="vrOpacity" type="range" min="0.25" max="1" step="0.05" value="0.8">
+      <label class="vr-original"><input id="vrOriginal" type="checkbox" checked> <span data-vr-text="original">同时显示原文</span></label>
+      <div class="vr-actions">
+        <button type="button" class="secondary-button" id="vrStart" data-vr-text="start">开启 VR 字幕</button>
+        <button type="button" class="secondary-button" id="vrStop" data-vr-text="stop" disabled>关闭</button>
+        <button type="button" class="secondary-button" id="vrPreview" data-vr-text="test" aria-describedby="vrPreviewHelp" disabled>显示测试字幕（5 秒）</button>
+        <button type="button" class="secondary-button" id="vrReset" data-vr-text="reset">恢复默认位置与样式</button>
+      </div>
+      <p class="field-help" id="vrPreviewHelp" data-vr-text="test_help">仅显示固定测试文字，不开启录音或调用 API；新字幕或清空会提前结束测试。</p>
+    </div>
+
+    <div class="setting-group translation-settings">
+      <label for="translationModeSelect"><span data-i18n="translationMode">翻译方式</span></label>
+      <select id="translationModeSelect" aria-describedby="translationModeHelp">
+        <option value="local" data-i18n="localTranslationOption">本地翻译 · 离线免费</option>
+        <option value="api" data-i18n="apiTranslationOption">API 翻译 · 自备服务</option>
+      </select>
+      <p class="field-help" id="translationModeHelp" data-i18n="translationModeHelp">每次启动默认本地模式。选择后点击“应用设置”才会生效；本地识别模型仍会使用。</p>
+      <div class="api-translation-fields" id="apiTranslationFields" hidden>
+        <label for="translationBaseUrl" data-i18n="apiBaseUrl">服务地址（Base URL）</label>
+        <input id="translationBaseUrl" type="url" maxlength="2048" autocomplete="off" spellcheck="false" aria-describedby="apiBaseUrlHelp">
+        <p class="field-help" id="apiBaseUrlHelp" data-i18n="apiBaseUrlHelp">仅支持 Chat Completions 兼容服务。填写服务方的完整 Base URL（常见以 /v1 结尾），也可填写完整 /chat/completions 地址。远程服务需要 HTTPS。</p>
+        <label for="translationApiModel" data-i18n="apiModel">服务方模型名称</label>
+        <input id="translationApiModel" type="text" maxlength="200" autocomplete="off" spellcheck="false">
+        <label for="translationApiKey" data-i18n="apiKey">API 密钥</label>
+        <input id="translationApiKey" type="password" maxlength="4096" autocomplete="off" spellcheck="false" aria-describedby="apiKeyHelp">
+        <p class="field-help" id="apiKeyHelp"></p>
+        <label class="api-check" for="translationNoKey"><input id="translationNoKey" type="checkbox"><span data-i18n="apiNoKey">此服务不需要密钥（例如本机服务）</span></label>
+        <p class="field-help api-key-note" data-i18n="apiKeyMemory">API 配置仅供本次运行使用，不保存到磁盘；切回本地会清除后台密钥，退出后需重新配置。</p>
+        <label class="api-check api-consent" for="translationConsent"><input id="translationConsent" type="checkbox"><span data-i18n="apiConsent">我同意将识别后的文字发送到上述服务，可能产生费用；语音仍在本地处理。</span></label>
+        <button id="testTranslationButton" class="secondary-button api-test-button" type="button" data-i18n="testApi">测试连接（发送一句测试文字）</button>
+        <p class="field-help" data-i18n="apiTestHelp">仅发送固定测试句 Hello.（英语→中文），不发送字幕历史，也不会切换当前模式。</p>
+        <p class="api-test-result" id="translationTestResult" role="status" aria-live="polite" hidden></p>
+      </div>
+    </div>
+
     <div class="setting-group translation-model">
       <label><span data-i18n="offlineTranslationModel">离线互译模型</span></label>
       <div class="model-status-row">
@@ -236,5 +284,6 @@
 
   <script src="/static/audio-session.js?v=ui" defer></script>
   <script src="/static/app.js?v=ui" defer></script>
+  <script src="/static/vr-subtitles.js?v=vr2" defer></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 param(
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [string]$InstallerFileName = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -59,7 +60,17 @@ if (-not (Test-Path -LiteralPath $VersionFile -PathType Leaf)) { throw "找不�
 $Version = (Get-Content -LiteralPath $VersionFile -Raw).Trim()
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "VERSION 必须是 1.0.11 这样的三段版本号。" }
 $Tag = "v$Version"
-$Installer = Join-Path $Root "YiSheng-Setup-$Version.exe"
+if ([string]::IsNullOrEmpty($InstallerFileName)) {
+    $InstallerFileName = "YiSheng-Setup-$Version.exe"
+}
+else {
+    $namePattern = '^YiSheng-Setup-' + [regex]::Escape($Version) + '(?:-[A-Za-z0-9]+)*\.exe$'
+    if ([IO.Path]::GetFileName($InstallerFileName) -ne $InstallerFileName -or $InstallerFileName -cnotmatch $namePattern) {
+        throw "安装包名称必须是当前版本的文件名，不能包含路径。"
+    }
+    if (-not $SkipBuild) { throw "指定安装包文件名时必须使用 -SkipBuild，并先完成该包的构建与验收。" }
+}
+$Installer = Join-Path $Root $InstallerFileName
 $Checksum = "$Installer.sha256"
 $Manifest = Join-Path $ReleaseBuild "update.json"
 
@@ -132,18 +143,29 @@ try {
         tag_name = $Tag
         name = "译声 YiSheng $Version"
         body = $Notes
-        draft = $false
+        draft = $true
         prerelease = $false
-        make_latest = "true"
     }
     Add-ReleaseAsset -Release $release -Path $Installer -ContentType "application/octet-stream"
     Add-ReleaseAsset -Release $release -Path $Checksum -ContentType "text/plain"
     Add-ReleaseAsset -Release $release -Path $Manifest -ContentType "application/json"
 
-    $published = Get-ReleaseByTag -Tag $Tag
-    $assets = @($published.assets)
+    $prepared = Invoke-GitHubJson -Method Get -Uri "https://api.github.com/repos/$Owner/$Repository/releases/$($release.id)"
+    $assets = @($prepared.assets)
     foreach ($expected in @($installerFile.Name, (Split-Path -Leaf $Checksum), "update.json")) {
         if (@($assets | Where-Object name -eq $expected).Count -ne 1) { throw "发布后缺少文件：$expected" }
+    }
+    foreach ($localPath in @($Installer, $Checksum, $Manifest)) {
+        $localFile = Get-Item -LiteralPath $localPath
+        $remoteAsset = @($assets | Where-Object name -eq $localFile.Name)[0]
+        $expectedDigest = "sha256:" + (Get-FileHash -LiteralPath $localPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($remoteAsset.state -ne "uploaded" -or $remoteAsset.size -ne $localFile.Length -or $remoteAsset.digest -ne $expectedDigest) {
+            throw "草稿资产校验失败，未切换公开更新入口：$($localFile.Name)"
+        }
+    }
+    $published = Invoke-GitHubJson -Method Patch -Uri "https://api.github.com/repos/$Owner/$Repository/releases/$($release.id)" -Body @{
+        draft = $false
+        make_latest = "true"
     }
     Write-Host "发布完成：$($published.html_url)" -ForegroundColor Green
 }

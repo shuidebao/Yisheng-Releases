@@ -1,0 +1,2 @@
+# Optional local SteamVR display; no cloud service or extra ML models.
+openvr==2.12.1401

@@ -27,6 +27,20 @@ class OverlayStub:
 
 
 class DesktopStartupTests(unittest.TestCase):
+    def test_vr_receives_current_subtitle_without_native_window(self) -> None:
+        bridge = DesktopBridge()
+        value = {"original": "hello", "translation": "你好", "meta": "offline"}
+        bridge.update_overlay(value)
+        self.assertEqual(bridge._vr_overlay._subtitle, value)
+        self.assertEqual(bridge.get_vr_state()["state"], "off")
+        bridge.clear_overlay()
+        self.assertEqual(bridge._vr_overlay._subtitle, {"original": "", "translation": "", "meta": ""})
+
+    def test_vr_rejects_invalid_options_without_starting(self) -> None:
+        bridge = DesktopBridge()
+        self.assertEqual(bridge.start_vr_overlay({"distance": 0})["error"], "invalid_settings")
+        self.assertEqual(bridge.get_vr_state()["state"], "off")
+
     def test_backend_stop_waits_for_lifespan_before_discarding_owner(self) -> None:
         backend = LocalBackend(port=1)
         server = types.SimpleNamespace(started=True, should_exit=False)
@@ -91,7 +105,7 @@ class DesktopStartupTests(unittest.TestCase):
         self.assertGreaterEqual(default, 90.0)
 
     def test_health_wait_stops_immediately_if_backend_thread_exits(self) -> None:
-        with patch("app.desktop.urllib.request.urlopen") as urlopen:
+        with patch("app.desktop.urllib.request.build_opener") as build_opener:
             self.assertFalse(
                 wait_for_health(
                     "http://127.0.0.1:1",
@@ -99,7 +113,7 @@ class DesktopStartupTests(unittest.TestCase):
                     is_running=lambda: False,
                 )
             )
-        urlopen.assert_not_called()
+        build_opener.return_value.open.assert_not_called()
 
     def test_overlay_only_renders_the_current_sentence(self) -> None:
         bridge = DesktopBridge()

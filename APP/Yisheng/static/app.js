@@ -7,7 +7,7 @@ const UI_TEXT = {
     pageTitle: "译声 · 本地同声传译", brandHome: "译声首页", versionLoading: "版本读取中…",
     switchLanguage: "切换中文或英文界面", openMini: "打开迷你置顶字幕", miniTitle: "迷你置顶字幕",
     miniSubtitle: "迷你字幕", openSettings: "打开设置", settings: "设置", ready: "准备就绪",
-    heroLead: "听见原声，", heroAccent: "即刻读懂。", heroCopy: "语音不上传云端。中文、日语、英语、韩语在你的电脑上完成识别与互译。",
+    heroLead: "听见原声，", heroAccent: "即刻读懂。", heroCopy: "语音始终在本机识别。默认离线翻译，也可在设置中自选 API 翻译文字。",
     latency: "处理延迟", recognizedLanguage: "识别语言", segments: "片段", original: "原文",
     clearHistory: "清空记录", waitingVoice: "等待你的声音", startHelp: "选择原语言和翻译目标，然后点击下方按钮开始同传",
     processing: "正在识别与翻译…", sourceLanguage: "原语言", autoLanguages: "自动识别（中文/日语/英语/韩语）",
@@ -48,6 +48,7 @@ const UI_TEXT = {
     cudaReady: "CUDA 已就绪；自动模式使用低占用 CPU，为游戏保留显卡。需要更快识别可手动选择 GPU。", cudaIncomplete: "检测到显卡，但 CUDA 12 / cuDNN 9 运行库不完整；自动模式使用低占用 CPU。",
     statusFailed: "无法读取引擎状态：{error}", defaultPrefix: "默认 · ", devicesFound: "已检测到 {count} 个 Windows 输出设备，使用 WASAPI 本地捕获。",
     noAudioDevice: "没有检测到可用的电脑声音设备。", audioComponentFailed: "电脑声音组件不可用：{error}", stillListening: "仍在监听 · 上一片段失败",
+    audioNotStarted: "声音未启动 · 请检查声音设备后重试", deviceDisconnected: "未连接 · {name}",
     processingFailed: "处理失败", sessionEnded: "本次同传已结束", translationUnavailable: "内置翻译模型不可用，请重新安装译声。",
     translationModelUnavailable: "翻译模型不可用", systemAudioReadFailed: "电脑声音读取失败 ({status})", systemAudioInterrupted: "电脑声音监听已中断",
     micHint: "只听本人说话 · 游戏/视频请选电脑声音", systemHint: "按停顿成句 · 已知游戏语言时请明确选择原语言", bothHint: "同时监听两路声音 · 计算量更大",
@@ -58,12 +59,27 @@ const UI_TEXT = {
     savedTo: "已保存到：{path}", saveFailed: "保存失败。", desktopExportFailed: "桌面导出失败：{error}", stopBeforeModel: "请先停止当前同传，再切换模型。",
     checkingModel: "检查模型中…", settingsApplied: "运行设置已应用。模型会在下次识别时加载。", checking: "检查中…", checkingLocalModel: "正在检查本地模型",
     translationChecked: "{source} → {target} 翻译模型检查完成。", offlinePackageMissing: "缺少离线模型包", install: "安装",
+    translationMode: "翻译方式", localTranslationOption: "本地翻译 · 离线免费", apiTranslationOption: "API 翻译 · 自备服务",
+    translationModeHelp: "每次启动默认本地模式。选择后点击“应用设置”才会生效；本地识别模型仍会使用。",
+    readingMode: "正在读取翻译模式…", localModeActive: "已生效：本地离线翻译", apiModeActive: "已生效：API 翻译 · 文字发送至自选服务",
+    apiRuntime: "本地识别 + API 翻译", apiBaseUrl: "服务地址（Base URL）", apiModel: "服务方模型名称", apiKey: "API 密钥",
+    apiBaseUrlHelp: "仅支持 Chat Completions 兼容服务。填写服务方的完整 Base URL（常见以 /v1 结尾），也可填写完整 /chat/completions 地址。远程服务需要 HTTPS。",
+    apiKeyRequired: "请输入密钥，或明确勾选“此服务不需要密钥”。更换服务地址或模型后需要重新填写。",
+    apiKeyReuse: "此地址和模型已配置密钥；留空可沿用本次运行的密钥，输入新密钥可替换。",
+    apiNoKey: "此服务不需要密钥（例如本机服务）", apiKeyMemory: "API 配置仅供本次运行使用，不保存到磁盘；切回本地会清除后台密钥，退出后需重新配置。",
+    apiConsent: "我同意将识别后的文字发送到上述服务，可能产生费用；语音仍在本地处理。",
+    testApi: "测试连接（发送一句测试文字）", apiTestHelp: "仅发送固定测试句 Hello.（英语→中文），不发送字幕历史，也不会切换当前模式。",
+    apiTesting: "正在发送测试文字…", apiTestSuccess: "连接成功 · {latency} ms · {translation}", apiConsentRequired: "请先确认文字发送与费用提示，再测试或应用 API 设置。",
+    apiFieldsRequired: "请填写完整的服务地址和模型名称。", apiStoppedRequired: "请先停止同传并等待当前片段处理结束，再更改或测试翻译设置。",
+    apiAddressInvalid: "请填写不含账号、密码、查询参数或片段的 HTTPS 服务地址；HTTP 仅限本机地址。",
+    apiTranslationFailed: "API 翻译失败，请检查服务配置或连接。", apiModeShort: "API 翻译", localModeShort: "本地翻译", settingsBusy: "正在应用或测试设置，请稍候。",
   },
   en: {
+    audioNotStarted: "Audio not started · Check your audio device and retry", deviceDisconnected: "Disconnected · {name}",
     pageTitle: "YiSheng · Local Live Interpreter", brandHome: "YiSheng home", versionLoading: "Loading version…",
     switchLanguage: "Switch between Chinese and English", openMini: "Open always-on-top mini subtitles", miniTitle: "Mini subtitles",
     miniSubtitle: "Mini subtitles", openSettings: "Open settings", settings: "Settings", ready: "Ready",
-    heroLead: "Hear every word. ", heroAccent: "Understand it now.", heroCopy: "Audio never goes to the cloud. Chinese, Japanese, English, and Korean are recognized and translated locally on your PC.",
+    heroLead: "Hear every word. ", heroAccent: "Understand it now.", heroCopy: "Speech recognition stays on your PC. Translate offline by default, or choose your own API service for text in Settings.",
     latency: "Latency", recognizedLanguage: "Language", segments: "Segments", original: "Original",
     clearHistory: "Clear history", waitingVoice: "Waiting for audio", startHelp: "Choose a source and target language, then start live interpretation below.",
     processing: "Recognizing and translating…", sourceLanguage: "Source language", autoLanguages: "Auto detect (Chinese/Japanese/English/Korean)",
@@ -114,6 +130,20 @@ const UI_TEXT = {
     savedTo: "Saved to: {path}", saveFailed: "Could not save the file.", desktopExportFailed: "Desktop export failed: {error}", stopBeforeModel: "Stop the current session before switching models.",
     checkingModel: "Checking model…", settingsApplied: "Settings applied. The model will load on the next recognition request.", checking: "Checking…", checkingLocalModel: "Checking bundled models",
     translationChecked: "{source} → {target} translation model checked.", offlinePackageMissing: "Offline model package missing", install: "Install",
+    translationMode: "Translation mode", localTranslationOption: "Local translation · Free and offline", apiTranslationOption: "API translation · Your own service",
+    translationModeHelp: "Each app launch defaults to local mode. Click Apply settings to activate your choice. Speech recognition still runs locally.",
+    readingMode: "Reading translation mode…", localModeActive: "Active: local offline translation", apiModeActive: "Active: API translation · Text sent to your service",
+    apiRuntime: "Local speech + API translation", apiBaseUrl: "Service address (Base URL)", apiModel: "Service model name", apiKey: "API key",
+    apiBaseUrlHelp: "Chat Completions-compatible services only. Enter the service's full Base URL (often ending in /v1), or its full /chat/completions address. Remote services require HTTPS.",
+    apiKeyRequired: "Enter a key, or explicitly select 'This service needs no key'. Enter the key again after changing the address or model.",
+    apiKeyReuse: "A key is configured for this address and model. Leave blank to reuse it for this app session, or enter a replacement.",
+    apiNoKey: "This service needs no key (such as a local server)", apiKeyMemory: "API settings are used only for this app session, never saved to disk. Local mode clears the backend key. Configure again after restarting.",
+    apiConsent: "I agree to send recognized text to the service above, which may charge fees. Audio processing stays local.",
+    testApi: "Test connection (sends one test sentence)", apiTestHelp: "Sends only the fixed sentence Hello. (English to Chinese), not subtitle history. Does not change the active mode.",
+    apiTesting: "Sending test text…", apiTestSuccess: "Connected · {latency} ms · {translation}", apiConsentRequired: "Confirm the text-sharing and fee notice before testing or applying API settings.",
+    apiFieldsRequired: "Enter the full service address and model name.", apiStoppedRequired: "Stop interpreting and wait for the current segment before changing or testing translation settings.",
+    apiAddressInvalid: "Use an HTTPS service address without credentials, query parameters or fragments. HTTP is allowed only for a loopback address.",
+    apiTranslationFailed: "API translation failed. Check the service configuration or connection.", apiModeShort: "API translation", localModeShort: "Local translation", settingsBusy: "Applying or testing settings. Please wait.",
   },
 };
 
@@ -164,6 +194,17 @@ const elements = {
   drawerBackdrop: $("#drawerBackdrop"),
   closeSettings: $("#closeSettings"),
   saveSettingsButton: $("#saveSettingsButton"),
+  translationModeSelect: $("#translationModeSelect"),
+  translationModeBadge: $("#translationModeBadge"),
+  apiTranslationFields: $("#apiTranslationFields"),
+  translationBaseUrl: $("#translationBaseUrl"),
+  translationApiModel: $("#translationApiModel"),
+  translationApiKey: $("#translationApiKey"),
+  translationNoKey: $("#translationNoKey"),
+  translationConsent: $("#translationConsent"),
+  apiKeyHelp: $("#apiKeyHelp"),
+  testTranslationButton: $("#testTranslationButton"),
+  translationTestResult: $("#translationTestResult"),
   installTranslationButton: $("#installTranslationButton"),
   clearCacheButton: $("#clearCacheButton"),
   cacheStatus: $("#cacheStatus"),
@@ -191,6 +232,11 @@ const state = {
   recording: false,
   starting: false,
   stopping: false,
+  settingsBusy: false,
+  testingTranslation: false,
+  translationDraftInitialized: false,
+  translationDraftDirty: false,
+  translationTest: null,
   releasePromise: null,
   sessionId: 0,
   microphoneSegmenter: null,
@@ -216,6 +262,7 @@ const state = {
   fallbackProcessor: null,
   captureLanguage: "en",
   captureTarget: "zh",
+  captureTranslationRevision: null,
   captureMode: "microphone",
   systemAudioActive: false,
   systemPollController: null,
@@ -237,6 +284,7 @@ const audioSourceNames = state.uiLanguage === "en"
 function applyUiLanguage() {
   const locale = state.uiLanguage === "en" ? "en" : "zh";
   document.documentElement.lang = locale === "en" ? "en" : "zh-CN";
+  window.YishengVR?.setLanguage(locale);
   document.title = tr("pageTitle");
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = tr(node.dataset.i18n);
@@ -269,8 +317,8 @@ function applyUiLanguage() {
     elements.recordLabel.textContent = tr("startInterpreting");
     elements.recordButton.setAttribute("aria-label", tr("startInterpreting"));
   }
-  const runtimeLabel = $("#runtimeLabel");
-  if (runtimeLabel) runtimeLabel.textContent = window.pywebview?.api ? tr("runtimeLocal") : tr("runtimeWeb");
+  renderTranslationSettings();
+  renderTranslationMode();
   if (window.pywebview?.api?.set_ui_language) {
     window.pywebview.api.set_ui_language(locale).catch(() => {});
   }
@@ -392,6 +440,7 @@ async function handleUpdateAction() {
 function openSettings() {
   loadCacheStatus();
   loadWhisperModels();
+  if (!state.recording && !state.starting && !state.stopping) loadSystemAudioDevices();
   elements.drawerBackdrop.hidden = false;
   requestAnimationFrame(() => elements.settingsDrawer.classList.add("open"));
   elements.settingsDrawer.setAttribute("aria-hidden", "false");
@@ -489,10 +538,12 @@ async function loadCacheStatus() {
 }
 
 async function clearAppCache() {
-  if (state.recording || state.processing || state.starting || state.stopping || state.queue.length) {
+  if (state.settingsBusy || translationSessionBusy()) {
     toast(tr("stopBeforeClear"), "error");
     return;
   }
+  state.settingsBusy = true;
+  renderTranslationSettings();
   elements.clearCacheButton.disabled = true;
   elements.clearCacheButton.textContent = tr("clearing");
   try {
@@ -524,7 +575,8 @@ async function clearAppCache() {
     toast(tf("clearFailed", { error: error.message }), "error", 6500);
     await loadCacheStatus();
   } finally {
-    elements.clearCacheButton.disabled = false;
+    state.settingsBusy = false;
+    renderTranslationSettings();
     elements.clearCacheButton.textContent = tr("clearCache");
   }
 }
@@ -533,6 +585,135 @@ function closeSettings() {
   elements.settingsDrawer.classList.remove("open");
   elements.settingsDrawer.setAttribute("aria-hidden", "true");
   window.setTimeout(() => { elements.drawerBackdrop.hidden = true; }, 300);
+}
+
+function translationSessionBusy() {
+  return Boolean(state.recording || state.starting || state.stopping || state.processing || state.queue.length || state.releasePromise);
+}
+
+function normalizeTranslationBaseUrl(value) {
+  const raw = String(value || "").trim();
+  // Keep the path spelling identical to the backend: never infer /v1, resolve
+  // dot segments, or reuse a credential for a different provider path.
+  if (!raw || /[^\x21-\x7e]|[\\?#]/.test(raw)) throw new Error(tr("apiAddressInvalid"));
+  const match = raw.match(/^(https?):\/\/([^/]+)(\/.*)?$/i);
+  if (!match || match[2].includes("@") || match[2].includes("%")) throw new Error(tr("apiAddressInvalid"));
+  let parsed;
+  try { parsed = new URL(raw); } catch { throw new Error(tr("apiAddressInvalid")); }
+  if (parsed.protocol === "http:" && !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
+    throw new Error(tr("apiAddressInvalid"));
+  }
+  const path = (match[3] || "").replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
+  return `${parsed.protocol}//${parsed.host}${path}`;
+}
+
+function canReuseTranslationKey() {
+  const applied = state.status?.translation;
+  if (applied?.mode !== "api" || !applied.has_api_key) return false;
+  try {
+    return normalizeTranslationBaseUrl(elements.translationBaseUrl.value) === applied.base_url
+      && elements.translationApiModel.value.trim() === applied.model;
+  } catch { return false; }
+}
+
+function initializeTranslationDraft() {
+  if (state.translationDraftInitialized || !state.status) return;
+  const applied = state.status.translation || { mode: "local" };
+  elements.translationModeSelect.value = applied.mode === "api" ? "api" : "local";
+  elements.translationBaseUrl.value = applied.mode === "api" ? applied.base_url : "";
+  elements.translationApiModel.value = applied.mode === "api" ? applied.model : "";
+  // Never restore API configuration or consent from persistent browser storage.
+  elements.translationApiKey.value = "";
+  elements.translationNoKey.checked = false;
+  elements.translationConsent.checked = false;
+  state.translationDraftInitialized = true;
+}
+
+function renderTranslationMode() {
+  const mode = state.status ? (state.status.translation?.mode === "api" ? "api" : "local") : "unknown";
+  elements.translationModeBadge.dataset.mode = mode;
+  elements.translationModeBadge.textContent = tr(mode === "api" ? "apiModeActive" : mode === "local" ? "localModeActive" : "readingMode");
+  const runtimeLabel = $("#runtimeLabel");
+  if (runtimeLabel) runtimeLabel.textContent = tr(mode === "api" ? "apiRuntime" : mode === "unknown" ? "readingMode" : window.pywebview?.api ? "runtimeLocal" : "runtimeWeb");
+}
+
+function renderTranslationSettings() {
+  const busy = state.settingsBusy || translationSessionBusy();
+  const disabled = busy || !state.translationDraftInitialized;
+  const apiDraft = elements.translationModeSelect.value === "api";
+  elements.apiTranslationFields.hidden = !apiDraft;
+  for (const field of [elements.translationModeSelect, elements.translationBaseUrl, elements.translationApiModel,
+    elements.translationNoKey, elements.translationConsent]) field.disabled = disabled;
+  elements.translationApiKey.disabled = disabled || elements.translationNoKey.checked;
+  elements.apiKeyHelp.textContent = tr(canReuseTranslationKey() ? "apiKeyReuse" : "apiKeyRequired");
+  elements.testTranslationButton.disabled = disabled || !apiDraft;
+  elements.testTranslationButton.textContent = tr(state.testingTranslation ? "apiTesting" : "testApi");
+  elements.saveSettingsButton.disabled = disabled;
+  if (!state.settingsBusy) elements.saveSettingsButton.textContent = tr("applySettings");
+  elements.modelSelect.disabled = busy;
+  elements.deviceSelect.disabled = busy;
+  elements.clearCacheButton.disabled = busy;
+  elements.installTranslationButton.disabled = busy;
+  if (state.settingsBusy) elements.recordButton.disabled = true;
+  else if (!state.starting && !state.stopping) elements.recordButton.disabled = false;
+  const result = state.translationTest;
+  elements.translationTestResult.hidden = !result;
+  elements.translationTestResult.dataset.error = String(Boolean(result?.error));
+  elements.translationTestResult.textContent = result
+    ? result.error || tf("apiTestSuccess", { latency: result.latency_ms, translation: result.translation }) : "";
+}
+
+function translationDraftChanged(identityChanged = false) {
+  state.translationDraftDirty = true;
+  state.translationTest = null;
+  if (identityChanged) {
+    elements.translationApiKey.value = "";
+    elements.translationNoKey.checked = false;
+    elements.translationConsent.checked = false;
+  }
+  renderTranslationSettings();
+}
+
+function translationSettingsPayload() {
+  if (elements.translationModeSelect.value !== "api") return { mode: "local" };
+  if (!elements.translationBaseUrl.value.trim() || !elements.translationApiModel.value.trim()) throw new Error(tr("apiFieldsRequired"));
+  if (!elements.translationConsent.checked) throw new Error(tr("apiConsentRequired"));
+  const base_url = normalizeTranslationBaseUrl(elements.translationBaseUrl.value);
+  const model = elements.translationApiModel.value.trim();
+  const key = elements.translationApiKey.value.trim();
+  if (!key && !elements.translationNoKey.checked && !canReuseTranslationKey()) throw new Error(tr("apiKeyRequired"));
+  return { mode: "api", base_url, model, consent: true,
+    api_key: elements.translationNoKey.checked ? "" : key || null };
+}
+
+function canChangeTranslationSettings() {
+  if (state.settingsBusy) { toast(tr("settingsBusy"), "info"); return false; }
+  if (translationSessionBusy()) { toast(tr("apiStoppedRequired"), "error"); return false; }
+  if (!state.translationDraftInitialized) { toast(tr("readingMode"), "info"); return false; }
+  return true;
+}
+
+async function testTranslationConnection() {
+  if (!canChangeTranslationSettings() || elements.translationModeSelect.value !== "api") return;
+  let payload;
+  try { payload = translationSettingsPayload(); } catch (error) { toast(error.message, "error"); return; }
+  state.settingsBusy = true;
+  state.testingTranslation = true;
+  state.translationTest = null;
+  renderTranslationSettings();
+  try {
+    const result = await api("/api/translation/test", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    if (!result?.ok) throw new Error(tr("apiTranslationFailed"));
+    state.translationTest = { translation: result.translation, latency_ms: result.latency_ms };
+  } catch (error) {
+    state.translationTest = { error: error.message };
+  } finally {
+    state.settingsBusy = false;
+    state.testingTranslation = false;
+    renderTranslationSettings();
+  }
 }
 
 function refreshTranslationState() {
@@ -580,6 +761,9 @@ async function loadStatus() {
       ? tf("cudaReady", { model: recommended.model })
       : tr("cudaIncomplete");
     refreshTranslationState();
+    initializeTranslationDraft();
+    renderTranslationSettings();
+    renderTranslationMode();
   } catch (error) {
     toast(tf("statusFailed", { error: error.message }), "error");
   }
@@ -588,19 +772,25 @@ async function loadStatus() {
 async function loadSystemAudioDevices() {
   try {
     const result = await api("/api/audio/system/devices");
+    if (state.recording || state.starting || state.stopping) return;
     state.systemDevices = result.devices || [];
+    // Never restore a saved numeric index: Windows may reuse it for another device.
+    const savedDevice = localStorage.getItem("yisheng-system-device-name") || "";
     elements.systemDeviceSelect.innerHTML = `<option value="">${tr("autoSpeaker")}</option>`;
     for (const device of state.systemDevices) {
       const option = document.createElement("option");
-      option.value = String(device.index);
+      option.value = device.name;
       option.textContent = `${device.default ? tr("defaultPrefix") : ""}${device.name}`;
       elements.systemDeviceSelect.append(option);
     }
 
-    const savedDevice = localStorage.getItem("yisheng-system-device") || "";
-    if ([...elements.systemDeviceSelect.options].some((item) => item.value === savedDevice)) {
-      elements.systemDeviceSelect.value = savedDevice;
+    if (savedDevice && !state.systemDevices.some(device => device.name === savedDevice)) {
+      const missing = document.createElement("option");
+      missing.value = savedDevice;
+      missing.textContent = tf("deviceDisconnected", { name: savedDevice });
+      elements.systemDeviceSelect.append(missing);
     }
+    elements.systemDeviceSelect.value = savedDevice;
     const available = Boolean(result.available && state.systemDevices.length);
     elements.systemDeviceSelect.disabled = !available;
     elements.systemAudioHelp.textContent = available
@@ -613,11 +803,9 @@ async function loadSystemAudioDevices() {
       elements.audioSourceSelect.value = "system";
       updateSourceHint();
     }
-    if (!available && elements.audioSourceSelect.value !== "microphone") {
-      elements.audioSourceSelect.value = "microphone";
-      updateSourceHint();
-    }
+    // A missing output must not silently turn a game capture into microphone capture.
   } catch (error) {
+    if (state.recording || state.starting || state.stopping) return;
     elements.systemDeviceSelect.disabled = true;
     elements.systemAudioHelp.textContent = tf("audioComponentFailed", { error: error.message });
     for (const option of elements.audioSourceSelect.options) {
@@ -729,6 +917,7 @@ function warnAudioBehind() {
 function enqueueAudio(chunk) {
   const dropped = enqueueLatest(state.queue, {
     ...chunk, sessionId: state.sessionId, language: state.captureLanguage, target: state.captureTarget,
+    translationRevision: state.captureTranslationRevision,
   });
   if (dropped) warnAudioBehind();
   processQueue();
@@ -761,13 +950,15 @@ function trimCharacterOverlap(previous, current) {
 async function processQueue() {
   if (state.processing || !state.queue.length) return;
   state.processing = true;
+  renderTranslationSettings();
   elements.thinkingRow.hidden = false;
   const chunk = state.queue.shift();
   const source = chunk.language;
   try {
     const previous = state.segments.at(-1);
     const { language: requestLanguage, context } = recognitionPlan(previous, chunk);
-    const result = await api(`/api/transcribe?language=${encodeURIComponent(requestLanguage)}&target=${encodeURIComponent(chunk.target)}&duration=${chunk.duration.toFixed(2)}&context=${encodeURIComponent(context)}`, {
+    const revision = Number.isInteger(chunk.translationRevision) ? `&translation_revision=${chunk.translationRevision}` : "";
+    const result = await api(`/api/transcribe?language=${encodeURIComponent(requestLanguage)}&target=${encodeURIComponent(chunk.target)}&duration=${chunk.duration.toFixed(2)}${revision}&context=${encodeURIComponent(context)}`, {
       method: "POST",
       headers: { "Content-Type": "audio/wav" },
       body: chunk.blob,
@@ -787,9 +978,10 @@ async function processQueue() {
     elements.thinkingRow.hidden = state.queue.length === 0;
     if (state.queue.length) processQueue();
     else if (!state.recording && !state.stopping) {
-      setSessionState(tr("sessionEnded"), false);
+      setSessionState(tr(state.captureError ? "systemAudioInterrupted" : "sessionEnded"), false);
       await releaseEngineIfIdle();
     }
+    renderTranslationSettings();
   }
 }
 
@@ -813,17 +1005,19 @@ function appendSegment(result) {
 
   item.className = "transcript-item";
   const confidence = result.language_probability ? `${Math.round(result.language_probability * 100)}%` : "—";
+  const unavailable = result.translation_mode === "api"
+    ? result.warning || tr("apiTranslationFailed") : tr("translationUnavailable");
   const translatedContent = result.translation_ready && result.translation
     ? `<p>${escapeHtml(result.translation)}</p>`
-    : `<p>${escapeHtml(tr("translationUnavailable"))}</p>`;
+    : `<p>${escapeHtml(unavailable)}</p>`;
   item.innerHTML = `
     <div class="transcript-cell original">
       <p>${escapeHtml(result.original)}</p>
-      <div class="transcript-meta"><span>${timestamp}</span><span>${audioSourceNames[result.audio_source] || tr("sound")}</span><span>${languageNames[result.language] || result.language}</span><span class="confidence">${confidence}</span></div>
+      <div class="transcript-meta"><span>${timestamp}</span><span>${escapeHtml(audioSourceNames[result.audio_source] || tr("sound"))}</span><span>${escapeHtml(languageNames[result.language] || result.language)}</span><span class="confidence">${confidence}</span></div>
     </div>
     <div class="transcript-cell translation ${result.translation_ready ? "" : "missing"}" data-target-language="${escapeHtml(languageNames[result.target_language] || result.target_language)}">
       ${translatedContent}
-      <div class="transcript-meta"><span>${languageNames[result.target_language] || result.target_language}</span><span>${result.model}</span><span>${result.device.toUpperCase()}</span><span>${result.latency_ms} ms</span></div>
+      <div class="transcript-meta"><span>${escapeHtml(languageNames[result.target_language] || result.target_language)}</span><span>${escapeHtml(result.model)}</span><span>${escapeHtml(String(result.device || "").toUpperCase())}</span><span>${escapeHtml(String(result.latency_ms))} ms</span><span>${escapeHtml(tr(result.translation_mode === "api" ? "apiModeShort" : "localModeShort"))}</span></div>
     </div>`;
   if (!continuing) elements.transcriptList.append(item);
   item.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -835,7 +1029,7 @@ function appendSegment(result) {
   if (window.pywebview?.api?.update_overlay) {
     window.pywebview.api.update_overlay({
       original: result.original,
-      translation: result.translation_ready ? result.translation : tr("translationModelUnavailable"),
+      translation: result.translation_ready ? result.translation : result.translation_mode === "api" ? unavailable : tr("translationModelUnavailable"),
       meta: `${timestamp} · ${modelLabels[result.model] || result.model} · ${result.latency_ms} ms`,
     }).catch(() => {});
   }
@@ -895,9 +1089,7 @@ async function pollSystemAudio() {
     } catch (error) {
       if (error.name === "AbortError" || !state.systemAudioActive) break;
       state.systemAudioActive = false;
-      toast(error.message, "error", 6500);
-      setSessionState(tr("systemAudioInterrupted"), false);
-      break;
+      return error;
     } finally {
       if (state.systemPollController === controller) state.systemPollController = null;
     }
@@ -919,21 +1111,29 @@ async function consumeSystemChunk(response) {
 }
 
 async function startSystemAudioCapture() {
-  const rawDeviceIndex = elements.systemDeviceSelect.value;
-  await api("/api/audio/system/start", {
+  const result = await api("/api/audio/system/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      device_index: rawDeviceIndex === "" ? null : Number(rawDeviceIndex),
+      device_name: elements.systemDeviceSelect.value || null,
       chunk_seconds: state.captureChunkSeconds,
     }),
   });
+  if (!result.running || result.error) throw new Error(result.error || tr("audioNotStarted"));
   state.systemAudioActive = true;
+  const session = state.sessionId;
   state.systemPollTask = pollSystemAudio();
+  // Cleanup only after polling has settled, never from inside the task it awaits.
+  state.systemPollTask.then(error => {
+    if (!error || session !== state.sessionId || !state.recording || state.stopping) return;
+    state.captureError = error;
+    if (!state.starting) void stopRecording(error);
+  });
 }
 
-async function stopCaptureResources() {
+async function stopCaptureResources({ discard = false, silent = false } = {}) {
   state.systemAudioActive = false;
+  if (discard) state.systemPollController?.abort();
   // Let an in-flight response finish: aborting after the backend dequeues its
   // audio would silently lose that sentence. Stop flushes the remaining tail.
   try { state.sourceNode?.disconnect(); } catch { /* no-op */ }
@@ -948,7 +1148,7 @@ async function stopCaptureResources() {
   try {
     await api("/api/audio/system/stop", { method: "POST" });
     await state.systemPollTask;
-    if (state.captureMode === "system" || state.captureMode === "both") {
+    if (!discard && (state.captureMode === "system" || state.captureMode === "both")) {
       for (;;) {
         const response = await fetch("/api/audio/system/chunk?timeout=0.05", { cache: "no-store" });
         if (response.status === 204) break;
@@ -957,7 +1157,7 @@ async function stopCaptureResources() {
       }
     }
   } catch (error) {
-    toast(error.message, "error", 6500);
+    if (!silent) toast(error.message, "error", 6500);
   } finally {
     state.systemPollTask = null;
   }
@@ -974,17 +1174,22 @@ function updateSourceHint() {
 }
 
 async function startRecording() {
+  if (state.settingsBusy) { toast(tr("settingsBusy"), "info"); return; }
+  if (!state.status) { toast(tr("readingMode"), "info"); return; }
   if (state.starting || state.recording || state.stopping) return;
   if (state.processing || state.queue.length) {
     toast(tr("finishingLast"), "info");
     return;
   }
   state.starting = true;
+  state.captureError = null;
+  renderTranslationSettings();
   elements.recordButton.disabled = true;
   elements.recordLabel.textContent = tr("preparingEngine");
   setSessionState(tr("preparingEngine"), true);
   state.captureLanguage = elements.languageSelect.value;
   state.captureTarget = elements.targetLanguageSelect.value;
+  state.captureTranslationRevision = Number.isInteger(state.status.translation?.revision) ? state.status.translation.revision : null;
   state.captureMode = elements.audioSourceSelect.value;
   state.sessionId += 1;
   state.lastSystemSequence = 0;
@@ -1005,6 +1210,7 @@ async function startRecording() {
     if (state.captureMode === "system" || state.captureMode === "both") {
       await startSystemAudioCapture();
     }
+    if (state.captureError) throw state.captureError;
 
     elements.recordButton.classList.add("recording");
     elements.recordButton.setAttribute("aria-label", tr("stopInterpreting"));
@@ -1018,8 +1224,9 @@ async function startRecording() {
     setSessionState(tf("lowLatency", { source: audioSourceNames[state.captureMode] }), true);
   } catch (error) {
     state.recording = false;
-    await stopCaptureResources();
+    await stopCaptureResources({ discard: true, silent: true });
     await releaseEngineIfIdle();
+    setSessionState(tr("audioNotStarted"), false);
     const permissionDenied = error.name === "NotAllowedError";
     toast(permissionDenied ? tr("micPermission") : tf("audioStartFailed", { error: error.message }), "error", 6500);
   } finally {
@@ -1027,16 +1234,24 @@ async function startRecording() {
     if (!state.recording) await releaseEngineIfIdle();
     elements.recordButton.disabled = false;
     if (!state.recording) {
+      elements.recordButton.classList.remove("recording");
+      elements.levelBars.classList.remove("active");
+      elements.languageSelect.disabled = false;
+      elements.targetLanguageSelect.disabled = false;
+      elements.audioSourceSelect.disabled = false;
+      elements.systemDeviceSelect.disabled = state.systemDevices.length === 0;
       elements.recordLabel.textContent = tr("startInterpreting");
       elements.recordButton.setAttribute("aria-label", tr("startInterpreting"));
       updateSourceHint();
     }
+    renderTranslationSettings();
   }
 }
 
-async function stopRecording() {
+async function stopRecording(captureError = null) {
   if (state.stopping) return;
   state.stopping = true;
+  renderTranslationSettings();
   elements.recordButton.disabled = true;
   elements.recordLabel.textContent = tr("finishingLast");
   setSessionState(tr("finishingLast"), false);
@@ -1044,7 +1259,7 @@ async function stopRecording() {
   if (state.captureMode === "microphone" || state.captureMode === "both") flushAudio(true);
   state.buffers = [];
   state.bufferedFrames = 0;
-  await stopCaptureResources();
+  await stopCaptureResources({ silent: Boolean(captureError) });
   state.stopping = false;
   elements.recordButton.disabled = false;
   elements.recordButton.classList.remove("recording");
@@ -1056,8 +1271,11 @@ async function stopRecording() {
   elements.audioSourceSelect.disabled = false;
   elements.systemDeviceSelect.disabled = state.systemDevices.length === 0;
   updateSourceHint();
-  setSessionState(state.processing || state.queue.length ? tr("finishingLast") : tr("sessionEnded"), false);
+  setSessionState(captureError ? tr("systemAudioInterrupted") :
+    (state.processing || state.queue.length ? tr("finishingLast") : tr("sessionEnded")), false);
+  if (captureError) toast(captureError.message, "error", 6500);
   if (!state.processing && !state.queue.length) await releaseEngineIfIdle();
+  renderTranslationSettings();
 }
 
 async function releaseEngineIfIdle() {
@@ -1069,6 +1287,7 @@ async function releaseEngineIfIdle() {
     // The process still releases all models during normal application exit.
   } finally {
     state.releasePromise = null;
+    renderTranslationSettings();
   }
 }
 
@@ -1120,37 +1339,54 @@ async function exportTranscript() {
 }
 
 async function saveSettings() {
-  if (state.recording || state.starting || state.stopping || state.processing || state.queue.length) {
-    toast(tr("stopBeforeModel"), "error");
-    return;
-  }
-  elements.saveSettingsButton.disabled = true;
-  elements.clearCacheButton.disabled = true;
+  if (!canChangeTranslationSettings()) return;
+  let translationPayload;
+  try { translationPayload = translationSettingsPayload(); } catch (error) { toast(error.message, "error"); return; }
+  const model = elements.modelSelect.value;
+  const device = elements.deviceSelect.value;
+  state.settingsBusy = true;
+  renderTranslationSettings();
   elements.saveSettingsButton.textContent = tr("checkingModel");
   try {
-    await ensureWhisperModel(elements.modelSelect.value);
+    await ensureWhisperModel(model);
     await api("/api/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: elements.modelSelect.value, device: elements.deviceSelect.value }),
+      body: JSON.stringify({ model, device }),
     });
-    localStorage.setItem("yisheng-engine", JSON.stringify({
-      model: elements.modelSelect.value,
-      device: elements.deviceSelect.value,
-    }));
+    localStorage.setItem("yisheng-engine", JSON.stringify({ model, device }));
+    // Applying local ASR settings does not grant permission to send text.
+    // Only this explicit, validated action changes the translation provider.
+    state.status = await api("/api/translation/config", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(translationPayload),
+    });
+    elements.translationApiKey.value = "";
+    state.translationDraftDirty = false;
+    state.translationDraftInitialized = false;
+    initializeTranslationDraft();
+    // Applied API settings retain consent for same-provider reuse this session.
+    elements.translationConsent.checked = state.status.translation?.mode === "api";
+    elements.translationNoKey.checked = state.status.translation?.mode === "api" && !state.status.translation.has_api_key;
+    state.translationTest = null;
+    refreshTranslationState();
+    renderTranslationMode();
     toast(tr("settingsApplied"));
-    await loadStatus();
     closeSettings();
   } catch (error) {
     toast(error.message, "error");
+    // Reconcile applied state after partial ASR success or a lost response.
+    // loadStatus does not overwrite the in-progress API draft.
+    await loadStatus();
   } finally {
-    elements.saveSettingsButton.disabled = false;
-    elements.clearCacheButton.disabled = false;
-    elements.saveSettingsButton.textContent = tr("applySettings");
+    state.settingsBusy = false;
+    renderTranslationSettings();
   }
 }
 
 async function installTranslation() {
+  if (!canChangeTranslationSettings()) return;
+  state.settingsBusy = true;
+  renderTranslationSettings();
   const source = elements.languageSelect.value;
   const target = elements.targetLanguageSelect.value;
   elements.installTranslationButton.disabled = true;
@@ -1165,7 +1401,8 @@ async function installTranslation() {
     elements.translationStatus.textContent = tr("offlinePackageMissing");
     toast(error.message, "error", 7000);
   } finally {
-    elements.installTranslationButton.disabled = false;
+    state.settingsBusy = false;
+    renderTranslationSettings();
     elements.installTranslationButton.textContent = tr("install");
   }
 }
@@ -1180,6 +1417,16 @@ elements.drawerBackdrop.addEventListener("click", closeSettings);
 elements.clearButton.addEventListener("click", clearTranscript);
 elements.exportButton.addEventListener("click", exportTranscript);
 elements.saveSettingsButton.addEventListener("click", saveSettings);
+elements.testTranslationButton.addEventListener("click", testTranslationConnection);
+elements.translationModeSelect.addEventListener("change", () => translationDraftChanged());
+elements.translationBaseUrl.addEventListener("input", () => translationDraftChanged(true));
+elements.translationApiModel.addEventListener("input", () => translationDraftChanged(true));
+elements.translationApiKey.addEventListener("input", () => translationDraftChanged());
+elements.translationNoKey.addEventListener("change", () => {
+  if (elements.translationNoKey.checked) elements.translationApiKey.value = "";
+  translationDraftChanged();
+});
+elements.translationConsent.addEventListener("change", () => translationDraftChanged());
 elements.installTranslationButton.addEventListener("click", installTranslation);
 elements.clearCacheButton.addEventListener("click", clearAppCache);
 elements.updateLaterButton.addEventListener("click", hideUpdateDialog);
@@ -1197,18 +1444,18 @@ elements.audioSourceSelect.addEventListener("change", () => {
   updateSourceHint();
 });
 elements.systemDeviceSelect.addEventListener("change", () => {
-  localStorage.setItem("yisheng-system-device", elements.systemDeviceSelect.value);
+  localStorage.setItem("yisheng-system-device-name", elements.systemDeviceSelect.value);
 });
 elements.modelSelect.addEventListener("change", () => renderWhisperModelStatus());
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeSettings(); });
 window.addEventListener("beforeunload", () => {
+  elements.translationApiKey.value = "";
   state.stream?.getTracks().forEach((track) => track.stop());
   if (state.systemAudioActive) fetch("/api/audio/system/stop", { method: "POST", keepalive: true });
 });
 window.addEventListener("pywebviewready", async () => {
   document.body.classList.add("desktop-app");
-  const runtimeLabel = $("#runtimeLabel");
-  if (runtimeLabel) runtimeLabel.textContent = tr("runtimeLocal");
+  renderTranslationMode();
   try {
     const info = await window.pywebview.api.get_app_info();
     document.documentElement.dataset.desktopVersion = info.version || "";

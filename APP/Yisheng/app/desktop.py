@@ -52,22 +52,43 @@ def find_free_port(host: str = HOST) -> int:
         return int(probe.getsockname()[1])
 
 
+class _NoHealthRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Readiness must come from our local endpoint, never a redirected page.
+        return None
+
+
 def wait_for_health(
     url: str,
     timeout: float = BACKEND_START_TIMEOUT_SECONDS,
     is_running: Callable[[], bool] | None = None,
 ) -> bool:
+    # System/game proxies can capture loopback traffic. Only this private
+    # health probe bypasses proxies; updates and global urllib state are intact.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoHealthRedirect())
+    endpoint = f"{url}/api/health"
     deadline = time.monotonic() + timeout
+    attempts = 0
+    last_error = "No response received"
     while time.monotonic() < deadline:
         if is_running is not None and not is_running():
             return False
+        attempts += 1
         try:
-            with urllib.request.urlopen(f"{url}/api/health", timeout=0.8) as response:
+            with opener.open(endpoint, timeout=0.8) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-                if response.status == 200 and payload.get("ok") is True:
+                if response.status == 200 and isinstance(payload, dict) and payload.get("ok") is True:
                     return True
-        except (OSError, ValueError, urllib.error.URLError):
-            time.sleep(0.1)
+                last_error = f"HTTP {response.status}: invalid or not-ready health response"
+        except (OSError, ValueError, urllib.error.URLError) as exc:
+            last_error = f"{type(exc).__name__}: {exc}"[:200].replace("\r", " ").replace("\n", " ")
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(0.1, remaining))
+    LOGGER.warning(
+        "Local backend health check timed out after %.1f seconds; endpoint=%s; attempts=%d; last_error=%s",
+        timeout, endpoint, attempts, last_error,
+    )
     return False
 
 
@@ -126,12 +147,16 @@ class LocalBackend:
         ):
             startup_error = self._startup_error
             thread_alive = bool(self._thread and self._thread.is_alive())
+            LOGGER.error(
+                "Local backend readiness failed; url=%s; thread_alive=%s; server_started=%s",
+                self.url, thread_alive, bool(self._server and self._server.started),
+            )
             self.stop(timeout=5.0)
             if startup_error is not None:
                 raise RuntimeError(f"本地同传后端启动失败：{startup_error}") from startup_error
             if not thread_alive:
                 raise RuntimeError("本地同传后端启动进程提前结束。")
-            raise RuntimeError(f"本地同传后端首次启动超过 {timeout:.0f} 秒，请重新启动应用。")
+            raise RuntimeError(f"本地后台连接检查超过 {timeout:.0f} 秒仍未通过，请查看 logs\\desktop.log。")
         LOGGER.info("Local backend ready after %.1f seconds", time.monotonic() - started_at)
 
     def stop(self, timeout: float | None = None) -> bool:
@@ -257,6 +282,30 @@ class DesktopBridge:
         self._overlay_locked = False
         self._overlay_positioned = False
         self._ui_language = "zh"
+        from .vr_overlay import VROverlay
+        self._vr_overlay = VROverlay()
+
+    def get_vr_state(self) -> dict[str, Any]:
+        return self._vr_overlay.snapshot()
+
+    def start_vr_overlay(self, options: dict[str, Any]) -> dict[str, Any]:
+        self._vr_overlay.update(self._latest_subtitle)
+        try:
+            return self._vr_overlay.start(options)
+        except ValueError:
+            return {"ok": False, "error": "invalid_settings"}
+
+    def configure_vr_overlay(self, options: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self._vr_overlay.configure(options)
+        except ValueError:
+            return {"ok": False, "error": "invalid_settings"}
+
+    def stop_vr_overlay(self) -> dict[str, Any]:
+        return self._vr_overlay.stop()
+
+    def preview_vr_overlay(self) -> dict[str, Any]:
+        return self._vr_overlay.preview(self._ui_language)
 
     def get_app_info(self) -> dict[str, Any]:
         hardware = detect_hardware()
@@ -403,6 +452,7 @@ class DesktopBridge:
         self._overlay_locked = bool(locked)
 
     def _render_overlay(self) -> None:
+        self._vr_overlay.update(self._latest_subtitle)
         if self._native_overlay is None:
             return
         try:
@@ -496,6 +546,7 @@ def main() -> int:
 
     backend = LocalBackend()
     app_control: WindowsAppControl | None = None
+    bridge: DesktopBridge | None = None
     smoke_test = os.getenv("YISHENG_DESKTOP_SMOKE_TEST") == "1"
     visual_overlay_test = os.getenv("YISHENG_OVERLAY_VISUAL_TEST") == "1"
     fatal_error: str | None = None
@@ -517,6 +568,11 @@ def main() -> int:
         if window is None:
             raise RuntimeError("无法创建桌面窗口。")
         bridge._window = window
+
+        def close_vr_overlay() -> None:
+            bridge._vr_overlay.stop()
+
+        window.events.closing += close_vr_overlay
 
         def request_app_exit() -> None:
             def close_window() -> None:
@@ -803,6 +859,8 @@ def main() -> int:
         LOGGER.exception("Desktop application failed")
         fatal_error = f"译声启动失败：\n{exc}\n\n详细信息已写入 logs\\desktop.log。"
     finally:
+        if bridge is not None:
+            bridge._vr_overlay.stop()
         if app_control is not None:
             app_control.stop()
         backend.stop()

@@ -14,6 +14,16 @@ else:
 
 @unittest.skipIf(main is None, "FastAPI is only included in the bundled desktop runtime")
 class MainAudioTests(unittest.IsolatedAsyncioTestCase):
+    async def test_system_capture_passes_device_name_and_keeps_503_errors(self):
+        config = main.SystemAudioConfig(device_name='Headphones', chunk_seconds=8)
+        with patch.object(main.system_audio, 'start', return_value={'running': True}) as start:
+            self.assertTrue((await main.start_system_audio(config))['running'])
+        start.assert_called_once_with(None, 8, 'Headphones')
+        with patch.object(main.system_audio, 'start', side_effect=main.SystemAudioError('device unavailable')):
+            with self.assertRaises(main.HTTPException) as caught:
+                await main.start_system_audio(config)
+        self.assertEqual(caught.exception.status_code, 503)
+
     @staticmethod
     def request(body: bytes, content_type: str = "audio/wav"):
         async def receive():

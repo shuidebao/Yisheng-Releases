@@ -47,3 +47,7 @@ jobs:
           node --check static/app.js
           node tests/frontend_audio_session.cjs
           node tests/frontend_pipeline.cjs
+          node tests/frontend_api_translation.cjs
+          node tests/frontend_system_audio.cjs
+          node --check static/vr-subtitles.js
+          node tests/frontend_vr_subtitles.cjs

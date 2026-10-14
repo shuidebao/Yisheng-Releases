@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .audio_input import prepare_audio_input
+from .api_translation import ApiTranslationSettings, ApiTranslator
 from .config import (
     WHISPER_MODEL_ROOT,
     HardwareInfo,
@@ -18,7 +19,7 @@ from .config import (
     recommended_profile,
 )
 from .text import clean_transcript, merge_continuation
-from .translation import OfflineTranslator
+from .translation import OfflineTranslator, TranslationResult
 from .whisper_models import ALLOWED_MODELS, ensure_whisper_model
 
 
@@ -72,6 +73,7 @@ class TranscriptResult:
     # Backend processing only: capture/endpointing and frontend queue time are
     # not included. Keep the existing latency_ms meaning for old frontends.
     timings_ms: dict[str, float] = field(default_factory=dict)
+    translation_mode: str = "local"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -92,6 +94,9 @@ class InterpreterEngine:
         self._model = None
         self._model_lock = threading.RLock()
         self.translator = OfflineTranslator()
+        self._api_translator: ApiTranslator | None = None
+        self._translation_revision = 0
+        self._translation_snapshot = (None, 0)
         self.last_error: str | None = None
 
     @property
@@ -112,7 +117,72 @@ class InterpreterEngine:
                 "last_error": self.last_error,
             },
             "translation_pairs": self.translator.installed_pairs(),
+            "translation": self.translation_status(),
         }
+
+    def translation_status(self) -> dict:
+        # Read mode and revision together without waiting for ongoing inference.
+        provider, revision = getattr(self, "_translation_snapshot", (None, 0))
+        return {
+            "mode": "api" if provider is not None else "local",
+            "base_url": provider.settings.base_url if provider is not None else "",
+            "model": provider.settings.model if provider is not None else "",
+            "has_api_key": bool(provider.settings.api_key) if provider is not None else False,
+            "revision": revision,
+        }
+
+    def _api_settings(self, base_url: str, model: str, api_key: str | None) -> ApiTranslationSettings:
+        settings = ApiTranslationSettings(base_url=base_url, model=model, api_key=api_key or "")
+        if api_key is None:
+            previous = getattr(self, "_api_translator", None)
+            if previous is None or (
+                previous.settings.base_url != settings.base_url or previous.settings.model != settings.model
+            ):
+                raise ValueError("服务地址或模型已改变，请重新填写密钥；无需密钥的服务请明确留空。")
+            settings = ApiTranslationSettings(settings.base_url, settings.model, previous.settings.api_key)
+        return settings
+
+    def configure_translation(
+        self, mode: str = "local", base_url: str = "", model: str = "",
+        api_key: str | None = None, consent: bool = False,
+    ) -> dict:
+        if mode not in {"local", "api"}:
+            raise ValueError("不支持的翻译模式。")
+        if mode == "api" and consent is not True:
+            raise ValueError("请先确认文字会发送到所选 API 服务，且可能产生费用。")
+        if not self._model_lock.acquire(blocking=False):
+            raise RuntimeError("正在处理语音或测试 API，请停止同传并等待完成后再切换。")
+        try:
+            # Construct and validate before replacing the working configuration.
+            candidate = ApiTranslator(self._api_settings(base_url, model, api_key)) if mode == "api" else None
+            previous = getattr(self, "_api_translator", None)
+            self.translator.unload()
+            if previous is not None:
+                previous.unload()
+            self._api_translator = candidate
+            self._translation_revision = getattr(self, "_translation_revision", 0) + 1
+            self._translation_snapshot = (candidate, self._translation_revision)
+            return self.status()
+        finally:
+            self._model_lock.release()
+
+    def test_translation_api(
+        self, base_url: str, model: str, api_key: str | None = None, consent: bool = False,
+    ) -> dict:
+        if consent is not True:
+            raise ValueError("测试会发送一句测试文字并可能产生费用，请先确认。")
+        if not self._model_lock.acquire(blocking=False):
+            raise RuntimeError("正在处理语音或测试 API，请等待完成后再测试。")
+        try:
+            provider = ApiTranslator(self._api_settings(base_url, model, api_key))
+            started = time.perf_counter()
+            result = provider.translate("Hello.", "en", "zh")
+            if not result.ready:
+                raise RuntimeError(result.warning or "API 翻译测试失败，请检查设置。")
+            return {"ok": True, "translation": result.text,
+                    "latency_ms": round((time.perf_counter() - started) * 1000)}
+        finally:
+            self._model_lock.release()
 
     def configure(self, model: str, device: str) -> dict:
         if model not in self.ALLOWED_MODELS:
@@ -255,6 +325,9 @@ class InterpreterEngine:
                         LOGGER.debug("Could not explicitly unload ASR model", exc_info=True)
             self._model = None
             translation_released = self.translator.unload()
+            provider = getattr(self, "_api_translator", None)
+            if provider is not None:
+                translation_released = provider.unload() or translation_released
             gc.collect()
         return {
             "ok": True,
@@ -270,9 +343,23 @@ class InterpreterEngine:
         audio_seconds: float = 0.0,
         context: str = "",
         target_language: str = "zh",
+        translation_revision: int | None = None,
     ) -> TranscriptResult:
         started = time.perf_counter()
+        submitted_revision = getattr(self, "_translation_revision", 0)
         with self._model_lock:
+            current_revision = getattr(self, "_translation_revision", 0)
+            # A queued local recording must never inherit a newly configured
+            # cloud destination. API submissions require an explicit snapshot
+            # of the settings used when that recording session began.
+            if (
+                (translation_revision is not None and translation_revision != current_revision)
+                or (translation_revision is None and (
+                    getattr(self, "_api_translator", None) is not None
+                    or submitted_revision != current_revision
+                ))
+            ):
+                raise RuntimeError("翻译设置已变化或未确认，请停止后重新开始同传。")
             lock_acquired = time.perf_counter()
             model = self._load_model()
             model_ready = time.perf_counter()
@@ -314,7 +401,17 @@ class InterpreterEngine:
             if continued:
                 original = merge_continuation(context, original, detected)
             recognition_finished = time.perf_counter()
-            translated = self.translator.translate(original, detected, target_language)
+            provider = getattr(self, "_api_translator", None)
+            translation_mode = "api" if provider is not None else "local"
+            if provider is None:
+                translated = self.translator.translate(original, detected, target_language)
+            else:
+                try:
+                    translated = provider.translate(original, detected, target_language)
+                except Exception:
+                    # Never attach provider exceptions: URLs/headers may contain credentials.
+                    LOGGER.warning("API translation failed unexpectedly")
+                    translated = TranslationResult("", detected, False, "API 翻译失败，请检查服务配置后重试。")
             translation_finished = time.perf_counter()
 
         latency = int((time.perf_counter() - started) * 1000)
@@ -331,6 +428,7 @@ class InterpreterEngine:
             translation_ready=translated.ready,
             continued=continued,
             warning=translated.warning or self.last_error,
+            translation_mode=translation_mode,
             timings_ms={
                 "lock_wait": round((lock_acquired - started) * 1000, 3),
                 "model_load": round((model_ready - lock_acquired) * 1000, 3),

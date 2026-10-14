@@ -39,9 +39,19 @@ Tag 必须和 `VERSION` 一致。不要移动、覆盖或删除已经公开的 T
 1. 检查当前 Commit、Tag 和版本是否一致。
 2. 构建单文件离线安装包。
 3. 生成 SHA-256 文件和自动更新 `update.json`。
-4. 创建同版本 GitHub Release。
+4. 创建同版本 GitHub Release 草稿。
 5. 上传安装包、SHA-256 和 `update.json`。
-6. 从公开地址反向验证最新版清单。
+6. 核对三份资产的大小、上传状态和服务端 SHA-256 后，再公开 Release 并设为最新版本。
+
+完成后须从固定公开地址反向验证最新版清单，并确认安装包下载地址、摘要及旧版本资产仍正确。若上传或校验失败，草稿保留用于排查，旧的公开最新版本保持；不要删除或覆盖已有 Release/资产来重试。
+
+已完成构建、SHA-256、标准解包和解包副本启动验收的同一安装包，可以使用 `-SkipBuild` 避免重新生成。1.0.25 的 VR 实验分发名称带有后缀，使用现有脚本：
+
+```powershell
+.\scripts\Publish-Release.ps1 -SkipBuild -InstallerFileName 'YiSheng-Setup-1.0.25-VR-Test.exe'
+```
+
+自定义名只允许当前版本的安装包文件名，不接受路径，且必须搭配 `-SkipBuild`。对应 `.sha256` 必须包含实际文件名；上传的 `update.json` 自动使用相同名称和下载地址。
 
 软件始终读取 `https://github.com/shuidebao/Yisheng-Releases/releases/latest/download/update.json`。发布脚本上传的新清单会沿用这个固定入口，因此旧版本仍可发现使用新命名规则的安装包。
 

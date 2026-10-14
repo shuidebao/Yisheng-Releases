@@ -1,4 +1,14 @@
 /* YiSheng UI 26 refresh: content-first layout with restrained glass controls. */
+#vrSettings input[type="range"] { width: 100%; accent-color: #70baff; }
+#vrSettings .vr-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+#vrStatus { font-size: 14px; line-height: 1.5; color: #c6ddf4; }
+#vrSettings .vr-actions button { min-height: 44px; padding: 10px 14px; border: 1px solid rgba(190, 210, 240, .25); border-radius: 12px; background: #222d42; color: #edf4ff; font: inherit; cursor: pointer; }
+#vrSettings .vr-actions button:disabled { opacity: .45; cursor: default; }
+#vrSettings .vr-actions button:focus-visible { outline: 2px solid #70baff; outline-offset: 2px; }
+#vrSettings input[type="number"] { min-height: 44px; width: 100%; padding: 10px 14px; border: 1px solid rgba(190, 210, 240, .25); border-radius: 12px; background: #111723; color: #edf4ff; font: inherit; }
+#vrSettings input[type="range"] { min-height: 36px; }
+#vrSettings .vr-original { justify-content: flex-start; gap: 12px; min-height: 44px; }
+#vrSettings .vr-original span { color: inherit; font-size: inherit; }
 :root {
   --bg: #070910;
   --surface: rgba(20, 24, 37, .86);
@@ -231,6 +241,24 @@ select:focus { border-color: rgba(186,255,99,.66); box-shadow: 0 0 0 4px rgba(18
 .about-card h3 { font-size: 16px; }
 .about-card dl { gap: 8px; }
 .about-card dl div, .about-card p, .about-card a { font-size: 12px; line-height: 1.55; }
+.translation-mode-badge { display: inline-flex; align-items: center; margin-top: 15px; padding: 9px 14px; border: 1px solid rgba(186,255,99,.3); border-radius: 14px; background: rgba(186,255,99,.07); color: var(--lime); font-size: 14px; line-height: 1.5; }
+.translation-mode-badge[data-mode="api"] { color: #c8d8ff; border-color: rgba(156,190,255,.4); background: rgba(126,165,244,.13); }
+.translation-mode-badge[data-mode="unknown"] { color: var(--muted); border-color: var(--line-strong); background: rgba(255,255,255,.035); }
+.translation-settings { padding-top: 23px; border-top: 1px solid var(--line); }
+.api-translation-fields { margin-top: 16px; padding: 18px; border: 1px solid var(--line-strong); border-radius: 18px; background: rgba(255,255,255,.035); }
+.api-translation-fields[hidden] { display: none; }
+.api-translation-fields > label:not(.api-check) { display: block; margin: 18px 0 9px; color: var(--text); font-size: 14px; line-height: 1.5; }
+.api-translation-fields > label:first-child { margin-top: 0; }
+.api-translation-fields > input { width: 100%; min-width: 0; min-height: 48px; padding: 11px 13px; border: 1px solid var(--line-strong); border-radius: 13px; color: var(--text); background: rgba(5,8,16,.5); font: inherit; font-size: 14px; }
+.api-translation-fields > input:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+.api-translation-fields .field-help { font-size: 13px; overflow-wrap: anywhere; }
+.api-translation-fields .api-check { display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; font-size: 14px; line-height: 1.65; cursor: pointer; }
+.api-check input { flex: 0 0 auto; width: 19px; height: 19px; margin: 3px 0 0; accent-color: var(--lime); }
+.api-consent { padding: 13px; border-radius: 12px; background: rgba(156,190,255,.08); }
+.api-test-button { width: 100%; min-height: 48px; margin-top: 18px; padding: 11px 13px; border: 1px solid var(--line-strong); border-radius: 13px; white-space: normal; line-height: 1.5; }
+.api-test-result { margin: 14px 0 0; color: var(--lime); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.api-test-result[data-error="true"] { color: #ffb5bd; }
+.api-translation-fields input:disabled, .api-test-button:disabled, #saveSettingsButton:disabled { opacity: .55; cursor: not-allowed; }
 
 .toast-stack { top: 104px; right: 24px; gap: 10px; width: min(420px, calc(100% - 48px)); }
 .toast { gap: 12px; padding: 16px 18px; border-color: var(--glass-edge); border-radius: 18px; background: var(--glass-strong); box-shadow: 0 20px 56px rgba(0,0,0,.48), inset 0 1px rgba(255,255,255,.08); font-size: 14px; line-height: 1.55; backdrop-filter: blur(24px); }
