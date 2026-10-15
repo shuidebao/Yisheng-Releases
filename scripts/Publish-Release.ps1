@@ -1,6 +1,7 @@
 param(
     [switch]$SkipBuild,
-    [string]$InstallerFileName = ""
+    [string]$InstallerFileName = "",
+    [long]$ResumeDraftId = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,6 +49,15 @@ function Add-ReleaseAsset {
         [Parameter(Mandatory = $true)][string]$ContentType
     )
     $file = Get-Item -LiteralPath $Path
+    $existingAssets = @($Release.assets | Where-Object name -eq $file.Name)
+    if ($existingAssets.Count -gt 0) {
+        $expectedDigest = "sha256:" + (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($existingAssets.Count -ne 1 -or $existingAssets[0].state -ne "uploaded" -or $existingAssets[0].size -ne $file.Length -or $existingAssets[0].digest -ne $expectedDigest) {
+            throw "草稿中已有不匹配的同名资产，不会覆盖或删除：$($file.Name)"
+        }
+        Write-Host "已校验并保留：$($file.Name)" -ForegroundColor Cyan
+        return
+    }
     $uploadBase = [string]$Release.upload_url
     $templateIndex = $uploadBase.IndexOf("{")
     if ($templateIndex -ge 0) { $uploadBase = $uploadBase.Substring(0, $templateIndex) }
@@ -60,6 +70,9 @@ if (-not (Test-Path -LiteralPath $VersionFile -PathType Leaf)) { throw "找不�
 $Version = (Get-Content -LiteralPath $VersionFile -Raw).Trim()
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "VERSION 必须是 1.0.11 这样的三段版本号。" }
 $Tag = "v$Version"
+if ($ResumeDraftId -lt 0 -or ($ResumeDraftId -gt 0 -and -not $SkipBuild)) {
+    throw "续传必须使用正数草稿 ID 和 -SkipBuild，保留原验收安装包。"
+}
 if ([string]::IsNullOrEmpty($InstallerFileName)) {
     $InstallerFileName = "YiSheng-Setup-$Version.exe"
 }
@@ -89,7 +102,15 @@ try {
     $head = (git rev-parse HEAD).Trim()
     $tagCommit = (git rev-list -n 1 $Tag 2>$null).Trim()
     if ([string]::IsNullOrWhiteSpace($tagCommit)) { throw "本地不存在 Tag $Tag。" }
-    if ($tagCommit -ne $head) { throw "Tag $Tag 不在当前 Commit，已停止发布。" }
+    if ($tagCommit -ne $head) {
+        if (-not $ResumeDraftId) { throw "Tag $Tag 不在当前 Commit，已停止发布。" }
+        git merge-base --is-ancestor $tagCommit $head
+        if ($LASTEXITCODE -ne 0) { throw "续传 Tag 不是当前 Commit 的祖先。" }
+        $changesSinceTag = @(git diff --name-only $tagCommit $head)
+        if ($LASTEXITCODE -ne 0 -or @($changesSinceTag | Where-Object { $_ -notin @('scripts/Publish-Release.ps1', 'docs/RELEASING.md') }).Count -gt 0) {
+            throw "Tag 之后包含应用或发布内容变化，不能续传旧包。"
+        }
+    }
 
     $remoteLines = @(git ls-remote --tags origin "refs/tags/$Tag" "refs/tags/$Tag^{}")
     if ($LASTEXITCODE -ne 0 -or $remoteLines.Count -eq 0) { throw "远程尚未 Push Tag $Tag。" }
@@ -98,7 +119,7 @@ try {
         if ($line -match '^([0-9a-f]{40})\s+refs/tags/.+\^\{\}$') { $remoteCommit = $matches[1] }
     }
     if (-not $remoteCommit -and $remoteLines[0] -match '^([0-9a-f]{40})\s+') { $remoteCommit = $matches[1] }
-    if ($remoteCommit -ne $head) { throw "远程 Tag $Tag 与当前 Commit 不一致。" }
+    if ($remoteCommit -ne $tagCommit) { throw "远程 Tag $Tag 与本地 Tag Commit 不一致。" }
 
     if (-not $SkipBuild) { & $BuildScript }
     if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw "找不到构建产物：$Installer" }
@@ -136,15 +157,37 @@ try {
         "User-Agent" = "YiSheng-Release-Publisher"
     }
 
-    if ($null -ne (Get-ReleaseByTag -Tag $Tag)) {
-        throw "GitHub Release $Tag 已存在。脚本不会覆盖、删除或重发已有版本。"
+    if ($ResumeDraftId) {
+        $release = Invoke-GitHubJson -Method Get -Uri "https://api.github.com/repos/$Owner/$Repository/releases/$ResumeDraftId"
+        if ($release.id -ne $ResumeDraftId -or $release.draft -ne $true -or $release.prerelease -ne $false -or $release.tag_name -cne $Tag -or $release.name -cne "译声 YiSheng $Version" -or $release.body -cne $Notes) {
+            throw "草稿 ID、版本、说明或发布状态不匹配；未更改远程内容。"
+        }
+        $expectedNames = @($installerFile.Name, (Split-Path -Leaf $Checksum), 'update.json')
+        if (@($release.assets | Where-Object { $_.name -notin $expectedNames }).Count -gt 0) {
+            throw "草稿包含非本次预期资产，已停止续传。"
+        }
+        Write-Host "继续已确认草稿：$ResumeDraftId" -ForegroundColor Cyan
     }
-    $release = Invoke-GitHubJson -Method Post -Uri "https://api.github.com/repos/$Owner/$Repository/releases" -Body @{
-        tag_name = $Tag
-        name = "译声 YiSheng $Version"
-        body = $Notes
-        draft = $true
-        prerelease = $false
+    else {
+        if ($null -ne (Get-ReleaseByTag -Tag $Tag)) {
+            throw "GitHub Release $Tag 已存在。脚本不会覆盖、删除或重发已有版本。"
+        }
+        $releasePage = 1
+        do {
+            $knownReleases = Invoke-GitHubJson -Method Get -Uri "https://api.github.com/repos/$Owner/$Repository/releases?per_page=100&page=$releasePage"
+            if (@($knownReleases | Where-Object { $_.tag_name -ceq $Tag }).Count -gt 0) {
+                throw "同版本 Release 或草稿已存在；请核对后使用准确草稿 ID 续传，不会重复创建。"
+            }
+            $releasePage++
+        } while ($knownReleases.Count -eq 100)
+        $release = Invoke-GitHubJson -Method Post -Uri "https://api.github.com/repos/$Owner/$Repository/releases" -Body @{
+            tag_name = $Tag
+            name = "译声 YiSheng $Version"
+            body = $Notes
+            draft = $true
+            prerelease = $false
+        }
+        Write-Host "已创建发布草稿：$($release.id)" -ForegroundColor Cyan
     }
     Add-ReleaseAsset -Release $release -Path $Installer -ContentType "application/octet-stream"
     Add-ReleaseAsset -Release $release -Path $Checksum -ContentType "text/plain"

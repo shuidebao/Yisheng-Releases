@@ -53,6 +53,10 @@ Tag 必须和 `VERSION` 一致。不要移动、覆盖或删除已经公开的 T
 
 自定义名只允许当前版本的安装包文件名，不接受路径，且必须搭配 `-SkipBuild`。对应 `.sha256` 必须包含实际文件名；上传的 `update.json` 自动使用相同名称和下载地址。
 
+若上传因网络中断，先用已认证的 GitHub Release 列表或明确 ID 核对草稿；按 Tag 查询可能只返回公开 Release。确认是本次同版本草稿后，在同一脚本增加 `-ResumeDraftId <实际草稿ID>` 续传。必须保留 `-SkipBuild` 和原安装包名称，脚本会核对 ID、Tag、标题、说明及草稿状态；已完整上传且大小/SHA 一致的资产会保留并跳过，任何同名不匹配或额外资产都会停止，不删除或覆盖资产。
+
+续传时若仅为修复发布工具新增了 Commit，允许当前 HEAD 位于原 Tag 之后，但 Tag 必须为祖先，全部差异只能是 `scripts/Publish-Release.ps1` 和本文件；应用、安装器、版本、说明或清单有任何变化均拒绝。远程 Tag 仍须与原 Tag Commit 一致，不移动已推送的 Tag。首次发布仍要求 Tag 位于 HEAD。
+
 软件始终读取 `https://github.com/shuidebao/Yisheng-Releases/releases/latest/download/update.json`。发布脚本上传的新清单会沿用这个固定入口，因此旧版本仍可发现使用新命名规则的安装包。
 
 ## 为什么暂时不在 GitHub Actions 构建完整安装包
